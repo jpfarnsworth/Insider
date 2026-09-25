@@ -23,7 +23,9 @@ npm run db:generate    # drizzle-kit: generate SQL from db/schema (works offline
 npm run db:migrate     # apply migrations as insider_migrator (explicit deploy step, never on app start)
 npm run db:studio
 npm run set-password   # set/change the sign-in password (needs a real terminal)
-npm run worker -- <job>   # e.g. refresh-tickers, ingest-daily-index
+npm run worker -- refresh-tickers
+npm run worker -- ingest-daily-index [--dates=YYYYMMDD,...] [--days=N]   # default: last 3 weekdays
+npm run fixtures:fetch -- YYYYMMDD ...   # re-download real Form 4 fixtures (see tests/fixtures)
 ```
 
 ## Architecture
@@ -59,6 +61,26 @@ There is no Row Level Security, so access control is entirely in code:
 - `proxy.ts` (Next 16's middleware) only checks that a session cookie *exists*. It is not proof of a valid session.
 - `requireUser()` (`lib/auth/require-user.ts`) is the real check. Call it in **every** page, route handler, server
   action and data-access function. Layouts do not re-run on client navigation, so the layout check is not enough.
+
+## Ingestion (verified against live EDGAR)
+
+- Source: the daily form index (`form.YYYYMMDD.idx`). A filing is listed once per filer (issuer and each owner), so
+  the same accession repeats: **dedupe by accession** (618 rows were 297 filings). The filing's full-submission `.txt`
+  gives both the acceptance datetime and the XML in one request.
+- `ACCEPTANCE-DATETIME` is **Eastern time** with no zone marker (`lib/edgar/time.ts` converts to UTC, DST-aware).
+  Real acceptances fall 06:00-22:00 ET, EDGAR's operating hours.
+- Ingest is idempotent: stored accessions are skipped before any network call, so the job looks back a few days and
+  heals missed runs. A filing that fails to parse is stored (`parse_status='failed'`, raw XML kept) and shows on
+  `/system`; "Retry parse" re-runs the parser on the stored XML.
+- A 4/A's XML has no original accession, only `dateOfOriginalSubmission`. The original is inferred from issuer + a
+  shared owner + that date (`lib/ingest/store.ts`); unlinked amendments are retried at the end of every ingest.
+- **Joint filings:** each transaction is stored once, attributed to the filing's first owner; other owners are in
+  `filing_owners`. Real data shows the same purchase can also arrive in *separate* filings by related filers (a fund
+  and its adviser both reported the same 1,000,000 shares at $15). Cluster detection (milestone 4) must dedupe
+  identical transactions across filings and not count related entities as distinct insiders.
+- Filers abbreviate security titles ("Comm Stock - $.16-2/3 value"); see `lib/form4/normalize.ts`.
+- `ticker` comes from `refresh-tickers` (SEC's company_tickers_exchange.json). A filing's own trading symbol is only
+  a fallback for issuers not in that file and never overwrites it.
 
 ## Rules that are easy to get wrong
 
