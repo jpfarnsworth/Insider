@@ -22,6 +22,7 @@ npm run test:coverage  # enforces 100% coverage on lib/form4 (spec §3.2)
 npm run db:generate    # drizzle-kit: generate SQL from db/schema (works offline)
 npm run db:migrate     # apply migrations as insider_migrator (explicit deploy step, never on app start)
 npm run db:studio
+npm run set-password   # set/change the sign-in password (needs a real terminal)
 npm run worker -- <job>   # e.g. refresh-tickers, ingest-daily-index
 ```
 
@@ -48,7 +49,11 @@ Never point the app at the migrator role. Never commit credentials; `.env.local`
 
 ## Auth (spec §6.0, §13)
 
-Magic link via Resend, DB sessions, single allowlisted email (`ALLOWED_EMAIL`, `lib/auth/allowlist.ts`).
+Email + password (Auth.js Credentials, bcrypt hash in `users.password_hash`), single allowlisted email
+(`ALLOWED_EMAIL`, `lib/auth/allowlist.ts`). Set the password with `npm run set-password`. Sessions are signed JWT cookies
+(7 days), a deliberate deviation from the spec's DB sessions: Auth.js can't store database sessions with the Credentials
+provider. They can't be revoked server-side; rotating `AUTH_SECRET` signs everything out. Failed logins are throttled
+per IP (`lib/auth/rate-limit.ts`, in-memory).
 There is no Row Level Security, so access control is entirely in code:
 
 - `proxy.ts` (Next 16's middleware) only checks that a session cookie *exists*. It is not proof of a valid session.

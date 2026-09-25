@@ -11,6 +11,8 @@ export const users = pgTable('users', {
   email: text('email').notNull().unique(),
   emailVerified: timestamp('email_verified', { withTimezone: true }),
   image: text('image'),
+  // bcrypt hash; set with `npm run set-password`. Null = cannot sign in.
+  passwordHash: text('password_hash'),
   ...timestamps,
 });
 

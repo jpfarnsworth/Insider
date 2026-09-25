@@ -19,7 +19,8 @@ tracks their forward returns against a benchmark. No trading in Phase 1. Require
    Then put the two passwords into `DATABASE_URL` (`insider_app`) and `DATABASE_MIGRATOR_URL` (`insider_migrator`).
 4. Restrict port 5432 on the AWS security group to this machine's IP and the prod server. Never `0.0.0.0/0`.
 5. `npm run db:migrate`
-6. `npm run dev` and open http://localhost:3040. Sign in with the address set in `ALLOWED_EMAIL`.
+6. `npm run set-password` (in a real terminal) to set the password for the address in `ALLOWED_EMAIL`.
+7. `npm run dev`, open http://localhost:3040 and sign in.
 
 ## Scripts
 
