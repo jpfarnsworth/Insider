@@ -1,0 +1,41 @@
+module.exports = {
+  apps: [
+    {
+      name: 'insider-signals-dev',
+      script: 'node_modules/.bin/next',
+      args: 'start --hostname 0.0.0.0 --port 3040',
+      cwd: __dirname,
+      instances: 1,
+      exec_mode: 'fork',
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '768M',
+      env: {
+        NODE_ENV: 'production',
+        PORT: 3040,
+      },
+    },
+    // Scheduled jobs (times are America/Chicago; spec §8). pm2 cron_restart
+    // runs the one-shot script on schedule and it exits when done.
+    {
+      name: 'insider-refresh-tickers',
+      script: 'node_modules/.bin/dotenv',
+      args: '-e .env.local -- node_modules/.bin/tsx worker/index.ts refresh-tickers',
+      cwd: __dirname,
+      cron_restart: '0 5 * * *',
+      autorestart: false,
+      watch: false,
+      env: { TZ: 'America/Chicago', DB_POOL_MAX: 5 },
+    },
+    {
+      name: 'insider-ingest-daily-index',
+      script: 'node_modules/.bin/dotenv',
+      args: '-e .env.local -- node_modules/.bin/tsx worker/index.ts ingest-daily-index',
+      cwd: __dirname,
+      cron_restart: '15 5 * * 1-5',
+      autorestart: false,
+      watch: false,
+      env: { TZ: 'America/Chicago', DB_POOL_MAX: 5 },
+    },
+  ],
+};
