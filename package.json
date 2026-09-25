@@ -15,7 +15,8 @@
     "db:migrate": "dotenv -e .env.local -- drizzle-kit migrate",
     "db:studio": "dotenv -e .env.local -- drizzle-kit studio",
     "worker": "dotenv -e .env.local -- tsx worker/index.ts",
-    "set-password": "dotenv -e .env.local -- tsx scripts/set-password.ts"
+    "set-password": "dotenv -e .env.local -- tsx scripts/set-password.ts",
+    "fixtures:fetch": "dotenv -e .env.local -- tsx scripts/fetch-fixtures.ts"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.3",

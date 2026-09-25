@@ -12,8 +12,12 @@ export function normalizeSecurityTitle(title: string): string {
 
 const EXCLUDED = /\b(preferred|warrants?|options?|rights?|units?|notes?|debentures?|convertible)\b/;
 
+// Filers abbreviate: real filings use "Comm Stock - $.16-2/3 value" (Analog
+// Devices) and "Class A Com".
+const COMMON = /\b(common|comm|com|ordinary)\b/;
+
 /** Common (ordinary) stock only: no preferred, warrants, options, units, notes. */
 export function isCommonStock(title: string): boolean {
   const t = normalizeSecurityTitle(title);
-  return /\b(common|ordinary)\b/.test(t) && !EXCLUDED.test(t);
+  return COMMON.test(t) && !EXCLUDED.test(t);
 }

@@ -39,6 +39,8 @@ describe('isCommonStock', () => {
     'Ordinary Shares',
     'COMMON SHARES',
     'Common Stock (Class B)',
+    'Comm Stock - $.16-2/3 value',
+    'Class A Com',
   ])('accepts %s', (title) => expect(isCommonStock(title)).toBe(true));
 
   it.each([
@@ -52,6 +54,7 @@ describe('isCommonStock', () => {
     '5% Notes due 2030',
     'Restricted Stock',
     'American Depositary Shares',
+    'Communications Equipment Stock',
   ])('rejects %s', (title) => expect(isCommonStock(title)).toBe(false));
 });
 

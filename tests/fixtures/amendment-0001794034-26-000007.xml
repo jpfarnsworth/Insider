@@ -1,0 +1,235 @@
+<?xml version="1.0"?>
+<ownershipDocument>
+
+    <schemaVersion>X0609</schemaVersion>
+
+    <documentType>4/A</documentType>
+
+    <periodOfReport>2026-09-18</periodOfReport>
+
+    <dateOfOriginalSubmission>2026-09-22</dateOfOriginalSubmission>
+
+    <notSubjectToSection16>0</notSubjectToSection16>
+
+    <issuer>
+        <issuerCik>0000884624</issuerCik>
+        <issuerName>Orthofix Medical Inc.</issuerName>
+        <issuerTradingSymbol>OFIX</issuerTradingSymbol>
+    </issuer>
+
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0001794034</rptOwnerCik>
+            <rptOwnerName>Juniper Investment Company, LLC</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerNonUSAddressFlag>false</rptOwnerNonUSAddressFlag>
+            <rptOwnerStreet1>555 MADISON AVENUE</rptOwnerStreet1>
+            <rptOwnerStreet2>24TH FLOOR</rptOwnerStreet2>
+            <rptOwnerCity>NEW YORK</rptOwnerCity>
+            <rptOwnerState>NY</rptOwnerState>
+            <rptOwnerZipCode>10022-3315</rptOwnerZipCode>
+            <rptOwnerStateDescription></rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>0</isDirector>
+            <isOfficer>0</isOfficer>
+            <isTenPercentOwner>1</isTenPercentOwner>
+            <isOther>0</isOther>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0001382909</rptOwnerCik>
+            <rptOwnerName>Bartholdson John A.</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerNonUSAddressFlag>false</rptOwnerNonUSAddressFlag>
+            <rptOwnerStreet1>C/O STONINGTON PARTNERS, INC.</rptOwnerStreet1>
+            <rptOwnerStreet2>540 MADISON AVENUE, 25TH FLOOR</rptOwnerStreet2>
+            <rptOwnerCity>NEW YORK</rptOwnerCity>
+            <rptOwnerState>NY</rptOwnerState>
+            <rptOwnerZipCode>10022</rptOwnerZipCode>
+            <rptOwnerStateDescription></rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>0</isDirector>
+            <isOfficer>0</isOfficer>
+            <isTenPercentOwner>1</isTenPercentOwner>
+            <isOther>0</isOther>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0001044005</rptOwnerCik>
+            <rptOwnerName>MICHAS ALEXIS P</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerNonUSAddressFlag>false</rptOwnerNonUSAddressFlag>
+            <rptOwnerStreet1>77 4TH AVENUE</rptOwnerStreet1>
+            <rptOwnerStreet2>C/O REVVITY</rptOwnerStreet2>
+            <rptOwnerCity>WALTHAM</rptOwnerCity>
+            <rptOwnerState>MA</rptOwnerState>
+            <rptOwnerZipCode>02451-7567</rptOwnerZipCode>
+            <rptOwnerStateDescription></rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>0</isDirector>
+            <isOfficer>0</isOfficer>
+            <isTenPercentOwner>1</isTenPercentOwner>
+            <isOther>0</isOther>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+
+    <aff10b5One>0</aff10b5One>
+
+    <nonDerivativeTable>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Common Stock, $0.10 par value per share</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-09-18</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>P</transactionCode>
+                <equitySwapInvolved>0</equitySwapInvolved>
+            </transactionCoding>
+            <transactionTimeliness>
+                <value></value>
+            </transactionTimeliness>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>120000</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>8.7393</value>
+                    <footnoteId id="F1"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>A</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>3581216</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>By: Juniper Targeted Opportunity Fund, L.P.</value>
+                    <footnoteId id="F3"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Common Stock, $0.10 par value per share</value>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-09-21</value>
+            </transactionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>P</transactionCode>
+                <equitySwapInvolved>0</equitySwapInvolved>
+            </transactionCoding>
+            <transactionTimeliness>
+                <value></value>
+            </transactionTimeliness>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>190000</value>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>8.8599</value>
+                    <footnoteId id="F2"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>A</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>3771216</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>By: Juniper Targeted Opportunity Fund, L.P.</value>
+                    <footnoteId id="F3"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+        <nonDerivativeHolding>
+            <securityTitle>
+                <value>Common Stock, $0.10 par value per share</value>
+            </securityTitle>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>84926</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>By: Juniper Multi-Strategy Fund, L.P.</value>
+                    <footnoteId id="F4"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeHolding>
+        <nonDerivativeHolding>
+            <securityTitle>
+                <value>Common Stock, $0.10 par value per share</value>
+            </securityTitle>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>935901</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>I</value>
+                </directOrIndirectOwnership>
+                <natureOfOwnership>
+                    <value>By: Juniper Targeted Opportunities, L.P.</value>
+                    <footnoteId id="F5"/>
+                </natureOfOwnership>
+            </ownershipNature>
+        </nonDerivativeHolding>
+    </nonDerivativeTable>
+
+    <footnotes>
+        <footnote id="F1">Represents the weighted average per share price with a range from $8.65 and $8.81. The reporting person undertakes to provide details of the trades to the Issuer or the Securities and Exchange Commission upon request.</footnote>
+        <footnote id="F2">Represents the weighted average per share price with a range from $8.63 and $8.98. The reporting person undertakes to provide details of the trades to the Issuer or the Securities and Exchange Commission upon request.</footnote>
+        <footnote id="F3">As the investment manager of Juniper Targeted Opportunity Fund, L.P. (Juniper Targeted Opportunity Fund&quot;), Juniper Investment Company may be deemed to beneficially own the securities held by the Juniper Targeted Opportunity Fund, Juniper Investment Company disclaims beneficial ownership of all interests reported herein except to the extent of its pecuniary interest therein. John A. Bartholdson and Alexis P. Michas serve as the managing members of Juniper Investment Company and the general partner of Juniper Targeted Opportunity Fund, and as a result, Messrs. Bartholdson and Michas share voting and dispositive power over such shares with Juniper Investment Company. Messrs. Bartholdson and Michas disclaim beneficial ownership of the holdings of Juniper Targeted Opportunity Fund reflected herein except to the extent of their pecuniary interest therein.</footnote>
+        <footnote id="F4">As the investment manager of Juniper Multi-Strategy Fund&quot; (Juniper Multi-Strategy&quot;), Juniper Investment Company may be deemed to beneficially own the securities held by Juniper Multi-Strategy. Juniper Investment Company disclaims beneficial ownership of all interests reported herein except to the extent of its pecuniary interest therein. Messrs. Bartholdson and Michas serve as the managing members of Juniper Investment Company and the general partner of Juniper Multi-Strategy, and as a result, Messrs. Bartholdson and Michas share voting and dispositive power over such shares with Juniper Investment Company. Messrs. Bartholdson and Michas disclaim beneficial ownership of the holdings of Juniper Multi-Strategy reflected herein except to the extent of their pecuniary interest therein.</footnote>
+        <footnote id="F5">As the investment manager of Juniper Targeted Opportunities, LP (Juniper Targeted Opportunities&quot;), Juniper Investment Company may be deemed to beneficially own the securities held by Juniper Targeted Opportunities, Juniper Investment Company disclaims beneficial ownership of all interests reported herein except to the extent of its pecuniary interest therein. Messrs. Bartholdson and Michas serve as the managing members of Juniper Investment Company and the general partner of Juniper Targeted Opportunities, and as a result, Messrs. Bartholdson and Michas share voting and dispositive power over such shares with Juniper Investment Company. Messrs. Bartholdson and Michas disclaim beneficial ownership of the holdings of Juniper Targeted Opportunities reflected herein except to the extent of their pecuniary interest therein.</footnote>
+    </footnotes>
+
+    <ownerSignature>
+        <signatureName>Juniper Investment Company, LLC, By:/s/ John A. Bartholdson</signatureName>
+        <signatureDate>2026-09-23</signatureDate>
+    </ownerSignature>
+
+    <ownerSignature>
+        <signatureName>/s/ John A. Bartholdson</signatureName>
+        <signatureDate>2026-09-23</signatureDate>
+    </ownerSignature>
+
+    <ownerSignature>
+        <signatureName>/s/ Alexis P. Michas</signatureName>
+        <signatureDate>2026-09-23</signatureDate>
+    </ownerSignature>
+</ownershipDocument>

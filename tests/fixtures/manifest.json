@@ -1,0 +1,146 @@
+[
+  {
+    "file": "indirect-ownership-0001104659-26-109827.xml",
+    "accession": "0001104659-26-109827",
+    "form": "4",
+    "acceptedAt": "20260923090007",
+    "case": "indirect-ownership",
+    "parseError": null
+  },
+  {
+    "file": "purchase-qualifying-0001747962-26-000007.xml",
+    "accession": "0001747962-26-000007",
+    "form": "4",
+    "acceptedAt": "20260923070020",
+    "case": "purchase-qualifying",
+    "parseError": null
+  },
+  {
+    "file": "purchase-qualifying-0001493152-26-043974.xml",
+    "accession": "0001493152-26-043974",
+    "form": "4",
+    "acceptedAt": "20260923174829",
+    "case": "purchase-qualifying",
+    "parseError": null
+  },
+  {
+    "file": "sale-0001193125-26-399723.xml",
+    "accession": "0001193125-26-399723",
+    "form": "4",
+    "acceptedAt": "20260923182909",
+    "case": "sale",
+    "parseError": null
+  },
+  {
+    "file": "tax-withholding-0000897069-26-001796.xml",
+    "accession": "0000897069-26-001796",
+    "form": "4",
+    "acceptedAt": "20260923164607",
+    "case": "tax-withholding",
+    "parseError": null
+  },
+  {
+    "file": "gift-0001239944-26-000080.xml",
+    "accession": "0001239944-26-000080",
+    "form": "4",
+    "acceptedAt": "20260923172219",
+    "case": "gift",
+    "parseError": null
+  },
+  {
+    "file": "flagged-10b5-1-sale-0000804328-26-000095.xml",
+    "accession": "0000804328-26-000095",
+    "form": "4",
+    "acceptedAt": "20260923162210",
+    "case": "flagged-10b5-1-sale",
+    "parseError": null
+  },
+  {
+    "file": "abbreviated-title-0002009110-26-000009.xml",
+    "accession": "0002009110-26-000009",
+    "form": "4",
+    "acceptedAt": "20260923161803",
+    "case": "abbreviated-title",
+    "parseError": null
+  },
+  {
+    "file": "option-exercise-0001627519-26-000012.xml",
+    "accession": "0001627519-26-000012",
+    "form": "4",
+    "acceptedAt": "20260923161506",
+    "case": "option-exercise",
+    "parseError": null
+  },
+  {
+    "file": "derivative-only-0001213900-26-102456.xml",
+    "accession": "0001213900-26-102456",
+    "form": "4",
+    "acceptedAt": "20260923103056",
+    "case": "derivative-only",
+    "parseError": null
+  },
+  {
+    "file": "grant-0001822991-26-000003.xml",
+    "accession": "0001822991-26-000003",
+    "form": "4",
+    "acceptedAt": "20260923191819",
+    "case": "grant",
+    "parseError": null
+  },
+  {
+    "file": "multiple-owners-0001062993-26-005069.xml",
+    "accession": "0001062993-26-005069",
+    "form": "4",
+    "acceptedAt": "20260923211646",
+    "case": "multiple-owners",
+    "parseError": null
+  },
+  {
+    "file": "footnote-price-0001493152-26-043976.xml",
+    "accession": "0001493152-26-043976",
+    "form": "4",
+    "acceptedAt": "20260923180352",
+    "case": "footnote-price",
+    "parseError": null
+  },
+  {
+    "file": "multiple-owners-0001104659-26-109968.xml",
+    "accession": "0001104659-26-109968",
+    "form": "4",
+    "acceptedAt": "20260923160109",
+    "case": "multiple-owners",
+    "parseError": null
+  },
+  {
+    "file": "non-common-security-0001550029-26-000009.xml",
+    "accession": "0001550029-26-000009",
+    "form": "4",
+    "acceptedAt": "20260923082720",
+    "case": "non-common-security",
+    "parseError": null
+  },
+  {
+    "file": "purchase-10b5-1-0001193125-26-399477.xml",
+    "accession": "0001193125-26-399477",
+    "form": "4",
+    "acceptedAt": "20260923163011",
+    "case": "purchase-10b5-1",
+    "parseError": null
+  },
+  {
+    "file": "amendment-0001571601-26-000014.xml",
+    "accession": "0001571601-26-000014",
+    "form": "4/A",
+    "acceptedAt": "20260923075641",
+    "case": "amendment",
+    "parseError": null
+  },
+  {
+    "file": "amendment-0001794034-26-000007.xml",
+    "accession": "0001794034-26-000007",
+    "form": "4/A",
+    "acceptedAt": "20260923155212",
+    "case": "amendment",
+    "parseError": null
+  }
+]

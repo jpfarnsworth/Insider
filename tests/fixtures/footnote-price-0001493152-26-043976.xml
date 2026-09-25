@@ -1,0 +1,167 @@
+<?xml version="1.0"?>
+<ownershipDocument>
+
+    <schemaVersion>X0609</schemaVersion>
+
+    <documentType>4</documentType>
+
+    <periodOfReport>2026-09-23</periodOfReport>
+
+    <notSubjectToSection16>1</notSubjectToSection16>
+
+    <issuer>
+        <issuerCik>0001846416</issuerCik>
+        <issuerName>ONE Nuclear Energy Inc.</issuerName>
+        <issuerTradingSymbol>ONEN</issuerTradingSymbol>
+        <issuerForeignTradingSymbol></issuerForeignTradingSymbol>
+    </issuer>
+
+    <reportingOwner>
+        <reportingOwnerId>
+            <rptOwnerCik>0001855598</rptOwnerCik>
+            <rptOwnerName>Allen Grant R</rptOwnerName>
+        </reportingOwnerId>
+        <reportingOwnerAddress>
+            <rptOwnerNonUSAddressFlag>false</rptOwnerNonUSAddressFlag>
+            <rptOwnerStreet1>195 US HWY 50</rptOwnerStreet1>
+            <rptOwnerStreet2>SUITE 207</rptOwnerStreet2>
+            <rptOwnerCity>ZEPHYR COVE</rptOwnerCity>
+            <rptOwnerState>NV</rptOwnerState>
+            <rptOwnerZipCode>89448</rptOwnerZipCode>
+            <rptOwnerStateDescription></rptOwnerStateDescription>
+        </reportingOwnerAddress>
+        <reportingOwnerRelationship>
+            <isDirector>0</isDirector>
+            <isOfficer>0</isOfficer>
+            <isTenPercentOwner>0</isTenPercentOwner>
+            <isOther>1</isOther>
+            <officerTitle></officerTitle>
+            <otherText>Director of Predecessor Issuer</otherText>
+        </reportingOwnerRelationship>
+    </reportingOwner>
+
+    <aff10b5One>0</aff10b5One>
+
+    <nonDerivativeTable>
+        <nonDerivativeTransaction>
+            <securityTitle>
+                <value>Class A ordinary shares</value>
+                <footnoteId id="F1"/>
+                <footnoteId id="F3"/>
+            </securityTitle>
+            <transactionDate>
+                <value>2026-09-23</value>
+            </transactionDate>
+            <deemedExecutionDate></deemedExecutionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>M</transactionCode>
+                <equitySwapInvolved>0</equitySwapInvolved>
+                <footnoteId id="F1"/>
+                <footnoteId id="F2"/>
+            </transactionCoding>
+            <transactionTimeliness></transactionTimeliness>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>25000</value>
+                    <footnoteId id="F4"/>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <footnoteId id="F1"/>
+                    <footnoteId id="F2"/>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>A</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>25000</value>
+                    <footnoteId id="F4"/>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>D</value>
+                </directOrIndirectOwnership>
+            </ownershipNature>
+        </nonDerivativeTransaction>
+    </nonDerivativeTable>
+
+    <derivativeTable>
+        <derivativeTransaction>
+            <securityTitle>
+                <value>Class B ordinary shares</value>
+            </securityTitle>
+            <conversionOrExercisePrice>
+                <footnoteId id="F1"/>
+                <footnoteId id="F2"/>
+            </conversionOrExercisePrice>
+            <transactionDate>
+                <value>2026-09-23</value>
+            </transactionDate>
+            <deemedExecutionDate></deemedExecutionDate>
+            <transactionCoding>
+                <transactionFormType>4</transactionFormType>
+                <transactionCode>M</transactionCode>
+                <equitySwapInvolved>0</equitySwapInvolved>
+                <footnoteId id="F1"/>
+                <footnoteId id="F2"/>
+            </transactionCoding>
+            <transactionTimeliness></transactionTimeliness>
+            <transactionAmounts>
+                <transactionShares>
+                    <value>25000</value>
+                    <footnoteId id="F4"/>
+                </transactionShares>
+                <transactionPricePerShare>
+                    <value>0</value>
+                </transactionPricePerShare>
+                <transactionAcquiredDisposedCode>
+                    <value>D</value>
+                </transactionAcquiredDisposedCode>
+            </transactionAmounts>
+            <exerciseDate>
+                <footnoteId id="F1"/>
+                <footnoteId id="F2"/>
+            </exerciseDate>
+            <expirationDate>
+                <footnoteId id="F1"/>
+                <footnoteId id="F2"/>
+            </expirationDate>
+            <underlyingSecurity>
+                <underlyingSecurityTitle>
+                    <value>Class A ordinary shares</value>
+                    <footnoteId id="F1"/>
+                    <footnoteId id="F3"/>
+                </underlyingSecurityTitle>
+                <underlyingSecurityShares>
+                    <value>25000</value>
+                    <footnoteId id="F4"/>
+                </underlyingSecurityShares>
+            </underlyingSecurity>
+            <postTransactionAmounts>
+                <sharesOwnedFollowingTransaction>
+                    <value>0</value>
+                </sharesOwnedFollowingTransaction>
+            </postTransactionAmounts>
+            <ownershipNature>
+                <directOrIndirectOwnership>
+                    <value>D</value>
+                </directOrIndirectOwnership>
+            </ownershipNature>
+        </derivativeTransaction>
+    </derivativeTable>
+
+    <footnotes>
+        <footnote id="F1">Pursuant to the business combination agreement dated October 22, 2025 (the &quot;Merger Agreement&quot;), among other things, at the closing of the transactions contemplated thereby (the &quot;Closing,&quot; and the date on which the Closing occurred, the &quot;Closing Date&quot;) and following the Domestication (as defined below), Hennessy Capital Investment Corp. VII, a Cayman Islands exempted company with limited liability (the &quot;Predecessor Issuer&quot;), was renamed &quot;ONE Nuclear Energy Inc.&quot; (&quot;Successor Issuer&quot;) and consummated its initial business combination with ONE Nuclear Energy LLC, a Delaware limited liability company (&quot;ONE Nuclear&quot;), with ONE Nuclear being the surviving company. Following the Closing, ONE Nuclear became a direct wholly-owned subsidiary of the Successor Issuer.</footnote>
+        <footnote id="F2">Pursuant to the Merger Agreement, on the Closing Date prior to the Closing, each then issued and outstanding Class B ordinary share, par value $0.0001 per share, of the Predecessor Issuer (each a &quot;Class B Ordinary Share&quot;) converted (the &quot;Sponsor Share Conversion&quot;) automatically, on a one-for-one basis, into one Class A ordinary share, par value $0.0001 per share, of the Predecessor Issuer (each a &quot;Class A Ordinary Share&quot;).</footnote>
+        <footnote id="F3">Pursuant to the Merger Agreement, immediately after the Sponsor Share Conversion, the Predecessor Issuer transferred by way of continuation and deregistration to and domesticated as a Delaware corporation (such continuation and domestication, the &quot;Domestication&quot;). In connection with, and after giving effect to, the Domestication, each then issued and outstanding Class A Ordinary Share converted automatically, on a one-for-one basis, into one share of common stock, par value $0.0001 per share, of the Successor Issuer (each, a &quot;Successor Share&quot;), and the Successor Issuer became the successor issuer to the Predecessor Issuer. The conversion of the Class A Ordinary Shares into Successor Shares did not alter the proportionate interests of the security holders, and accordingly the conversion is exempt from Section 16 of the Securities Exchange Act of 1934, as amended.</footnote>
+        <footnote id="F4">The reporting person also has pecuniary interests in securities through his membership interest in HC VII Sponsor LLC, over which the reporting person does not have voting or dispositive control.</footnote>
+    </footnotes>
+
+    <ownerSignature>
+        <signatureName>/s/ Nicholas Geeza as attorney-in-fact for Grant Allen</signatureName>
+        <signatureDate>2026-09-23</signatureDate>
+    </ownerSignature>
+</ownershipDocument>
