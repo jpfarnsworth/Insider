@@ -3,18 +3,27 @@ import type { Db } from '@/lib/db';
 import { issuers, priceBars, signalOutcomes, signals } from '@/db/schema';
 import { loadCalendar, toAlpacaSymbol } from './store';
 import { BENCHMARKS, computeOutcomes, type OutcomeRow } from './outcomes';
+import { averageDollarVolume } from './costs';
 import { toAdjBars, type AdjBar } from './returns';
+
+const VOLUME_SESSIONS = 30;
 
 const CHUNK = 100;
 const fixed = (n: number | null) => (n === null ? null : n.toFixed(6));
 const same = (a: string | null, b: string | null) => (a === null || b === null ? a === b : Number(a) === Number(b));
 
-async function loadBars(db: Db, tickers: string[]): Promise<Map<string, { adj: AdjBar[]; rawOpen: Map<string, string> }>> {
+interface LoadedBars {
+  adj: AdjBar[];
+  rawOpen: Map<string, string>;
+  liquidity: Array<{ date: string; close: number; volume: number }>;
+}
+
+async function loadBars(db: Db, tickers: string[]): Promise<Map<string, LoadedBars>> {
   const rows = await db.select().from(priceBars).where(inArray(priceBars.ticker, tickers)).orderBy(asc(priceBars.date));
   const byTicker = new Map<string, typeof rows>();
   for (const r of rows) byTicker.set(r.ticker, [...(byTicker.get(r.ticker) ?? []), r]);
 
-  const out = new Map<string, { adj: AdjBar[]; rawOpen: Map<string, string> }>();
+  const out = new Map<string, LoadedBars>();
   for (const [ticker, list] of byTicker) {
     out.set(ticker, {
       adj: toAdjBars(
@@ -29,6 +38,7 @@ async function loadBars(db: Db, tickers: string[]): Promise<Map<string, { adj: A
         })),
       ),
       rawOpen: new Map(list.map((r) => [r.date, r.open])),
+      liquidity: list.map((r) => ({ date: r.date, close: Number(r.close), volume: r.volume })),
     });
   }
   return out;
@@ -61,6 +71,7 @@ export async function computeAndStoreOutcomes(db: Db): Promise<OutcomeStats> {
       status: signals.status,
       entryDate: signals.entryDate,
       entryPrice: signals.entryPrice,
+      avgDollarVolume: signals.avgDollarVolume,
       ticker: issuers.ticker,
     })
     .from(signals)
@@ -71,7 +82,7 @@ export async function computeAndStoreOutcomes(db: Db): Promise<OutcomeStats> {
     const chunk = all.slice(i, i + CHUNK);
     const symbols = [...new Set(chunk.filter((s) => s.ticker).map((s) => toAlpacaSymbol(s.ticker!)))];
     const [bars, existing] = await Promise.all([
-      symbols.length ? loadBars(db, symbols) : Promise.resolve(new Map()),
+      symbols.length ? loadBars(db, symbols) : Promise.resolve(new Map<string, LoadedBars>()),
       db.select().from(signalOutcomes).where(inArray(signalOutcomes.signalId, chunk.map((s) => s.id))),
     ]);
     const have = new Map(existing.map((r) => [`${r.signalId}|${r.horizonDays}|${r.benchmarkTicker}`, r]));
@@ -118,8 +129,12 @@ export async function computeAndStoreOutcomes(db: Db): Promise<OutcomeStats> {
       if (ended) stats.dataEnded++;
       const entryPrice = result.entryDate ? (own?.rawOpen.get(result.entryDate) ?? null) : null;
       const status = s.status === 'amended' ? s.status : ended ? 'data_ended' : 'active';
-      if (s.entryDate !== result.entryDate || s.entryPrice !== entryPrice || s.status !== status) {
-        await db.update(signals).set({ entryDate: result.entryDate, entryPrice, status }).where(and(eq(signals.id, s.id)));
+      const dv = result.entryDate
+        ? averageDollarVolume((own?.liquidity ?? []).filter((b) => b.date < result.entryDate!).slice(-VOLUME_SESSIONS))
+        : null;
+      const avgDollarVolume = dv === null ? null : dv.toFixed(2);
+      if (s.entryDate !== result.entryDate || s.entryPrice !== entryPrice || s.status !== status || !same(s.avgDollarVolume, avgDollarVolume)) {
+        await db.update(signals).set({ entryDate: result.entryDate, entryPrice, status, avgDollarVolume }).where(and(eq(signals.id, s.id)));
       }
     }
   }

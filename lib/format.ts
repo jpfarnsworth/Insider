@@ -50,3 +50,15 @@ const fullDate = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', year: 'nume
 export function formatFullDay(d: string | null | undefined): string {
   return d ? fullDate.format(new Date(`${d}T00:00:00Z`)) : '—';
 }
+
+/** A percentage value (already in percent units) with an explicit sign and a real minus: +2.3% / −1.1%. */
+export function formatPct(v: number | null | undefined, digits = 1): string {
+  if (v === null || v === undefined || Number.isNaN(v)) return '—';
+  const sign = v > 0 ? '+' : v < 0 ? '−' : '';
+  return `${sign}${Math.abs(v).toFixed(digits)}%`;
+}
+
+/** A 0..1 rate as a whole percent: 0.625 -> "63%". */
+export function formatRate(v: number | null | undefined): string {
+  return v === null || v === undefined || Number.isNaN(v) ? '—' : `${Math.round(v * 100)}%`;
+}

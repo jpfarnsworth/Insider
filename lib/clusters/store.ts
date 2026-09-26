@@ -1,7 +1,7 @@
 import { and, eq, exists, inArray, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { Db } from '@/lib/db';
-import { clusterEvents, clusters, clusterTransactions, filingOwners, filings, issuers, signals, transactions } from '@/db/schema';
+import { clusterEvents, clusters, clusterTransactions, filingOwners, filings, insiders, issuers, signals, transactions } from '@/db/schema';
 import { getSetting } from '@/lib/settings';
 import { detectClusters, type DetectedCluster, type Purchase } from './detect';
 import { CLUSTER_RULE_KEY, CLUSTER_RULE_VERSION, clusterRuleSchema, type ClusterRule } from './rule';
@@ -184,3 +184,73 @@ export async function detectAndStoreClusters(db: Db, asOf: string, rule?: Cluste
   return stats;
 }
 
+
+export interface BuildingCluster {
+  issuerCik: string;
+  ticker: string | null;
+  name: string;
+  insiderCount: number;
+  totalValue: number;
+  lastPurchase: string;
+  insiders: string[];
+}
+
+/**
+ * Early watch (spec §9.2): issuers where the same rule, minus one insider, currently holds, so
+ * one more buyer would make a signal. Only issuers with no active cluster already, and only
+ * clusters still inside their window. Read-only: nothing here creates a signal.
+ */
+export async function findBuildingClusters(db: Db, asOf: string, rule?: ClusterRule, limit = 10): Promise<BuildingCluster[]> {
+  const r = rule ?? (await loadClusterRule(db));
+  const need = r.minInsiders - 1;
+  if (need < 1) return [];
+
+  const since = new Date(Date.parse(`${asOf}T00:00:00Z`) - r.windowDays * 86_400_000).toISOString().slice(0, 10);
+  const candidates = await db
+    .select({ cik: transactions.issuerCik })
+    .from(transactions)
+    .where(and(eq(transactions.isQualifying, true), sql`${transactions.transactionDate} >= ${since}`))
+    .groupBy(transactions.issuerCik)
+    .having(sql`count(distinct ${transactions.insiderCik}) >= ${need}`);
+  if (!candidates.length) return [];
+
+  const active = new Set(
+    (await db.select({ cik: clusters.issuerCik }).from(clusters).where(eq(clusters.status, 'active'))).map((c) => c.cik),
+  );
+  const ciks = candidates.map((c) => c.cik).filter((c) => !active.has(c));
+  const relaxed: ClusterRule = { ...r, minInsiders: need };
+
+  const found: Array<{ cik: string; d: DetectedCluster }> = [];
+  for (let i = 0; i < ciks.length; i += CHUNK) {
+    const chunk = ciks.slice(i, i + CHUNK);
+    const purchases = await loadPurchases(db, chunk);
+    for (const cik of chunk) {
+      for (const d of detectClusters(purchases.get(cik) ?? [], { rule: relaxed, asOf })) {
+        // Still open, and exactly one buyer short of a real cluster.
+        if (d.status === 'active' && d.insiderCount === need) found.push({ cik, d });
+      }
+    }
+  }
+  if (!found.length) return [];
+
+  const top = found.sort((a, b) => b.d.totalValue - a.d.totalValue).slice(0, limit);
+  const [issuerRows, insiderRows] = await Promise.all([
+    db.select({ cik: issuers.cik, name: issuers.name, ticker: issuers.ticker }).from(issuers).where(inArray(issuers.cik, top.map((t) => t.cik))),
+    db
+      .select({ cik: insiders.cik, name: insiders.name })
+      .from(insiders)
+      .where(inArray(insiders.cik, [...new Set(top.flatMap((t) => t.d.members.map((m) => m.insiderCik)))])),
+  ]);
+  const issuerBy = new Map(issuerRows.map((i) => [i.cik, i]));
+  const nameBy = new Map(insiderRows.map((i) => [i.cik, i.name]));
+
+  return top.map(({ cik, d }) => ({
+    issuerCik: cik,
+    ticker: issuerBy.get(cik)?.ticker ?? null,
+    name: issuerBy.get(cik)?.name ?? cik,
+    insiderCount: d.insiderCount,
+    totalValue: d.totalValue,
+    lastPurchase: d.windowEnd,
+    insiders: [...new Set(d.members.map((m) => nameBy.get(m.insiderCik) ?? m.insiderCik))],
+  }));
+}

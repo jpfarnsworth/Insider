@@ -70,6 +70,13 @@ export async function AgentPanel({ signalId, signalAt, latestEvalId }: { signalI
           </p>
         )}
 
+        {latest ? (
+          <details className="text-xs">
+            <summary className="text-muted-foreground hover:text-foreground cursor-pointer">View input bundle (what the model saw)</summary>
+            <pre className="bg-muted mt-2 max-h-96 overflow-auto rounded-md p-3 text-[11px] leading-snug whitespace-pre-wrap">{JSON.stringify(latest.inputBundle, null, 2)}</pre>
+          </details>
+        ) : null}
+
         <form action={rescoreSignal}>
           <input type="hidden" name="signalId" value={signalId} />
           <Button type="submit" size="sm" variant="outline">

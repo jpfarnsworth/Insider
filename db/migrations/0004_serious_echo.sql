@@ -1,0 +1,1 @@
+ALTER TABLE "signals" ADD COLUMN "avg_dollar_volume" numeric(24, 2);

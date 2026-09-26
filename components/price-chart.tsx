@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { ChartPoint } from '@/lib/market/chart';
 import { formatDay } from '@/lib/format';
+import { niceTicks } from '@/components/charts/scale';
 
 interface Props {
   points: ChartPoint[];
@@ -19,16 +20,6 @@ const PLOT_H = H - M.t - M.b;
 
 const ret = (v: number) => v - 100;
 const signed = (v: number, digits = 1) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(digits)}%`;
-
-/** Round tick steps (1, 2, 5 x 10^n) so the axis reads in clean numbers. */
-function ticks(min: number, max: number, target = 5): number[] {
-  const raw = (max - min) / target;
-  const pow = 10 ** Math.floor(Math.log10(raw));
-  const step = [1, 2, 5, 10].map((m) => m * pow).find((s) => s >= raw) ?? raw;
-  const out: number[] = [];
-  for (let v = Math.ceil(min / step) * step; v <= max + 1e-9; v += step) out.push(Math.round(v * 1e6) / 1e6);
-  return out;
-}
 
 function path(points: ChartPoint[], key: 'stock' | 'bench', x: (i: number) => number, y: (v: number) => number) {
   let d = '';
@@ -58,7 +49,7 @@ export function PriceChart({ points, entryIndex, stockLabel, benchLabel }: Props
   const x = (i: number) => M.l + (points.length > 1 ? (i / (points.length - 1)) * PLOT_W : 0);
   const y = (v: number) => M.t + (1 - (v - yMin) / (yMax - yMin)) * PLOT_H;
 
-  const yTicks = ticks(yMin, yMax);
+  const yTicks = niceTicks(yMin, yMax);
   const xTickIdx = Array.from(new Set([0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(f * (points.length - 1)))));
 
   const lastOf = (key: 'stock' | 'bench') => {

@@ -1,10 +1,10 @@
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '@/lib/db';
 import { priceBars, signalOutcomes } from '@/db/schema';
 import { getSetting } from '@/lib/settings';
 import { buildChart, type ChartData } from './chart';
 import { averageDollarVolume, COSTS_KEY, costsSchema, roundTripCostPct } from './costs';
-import { toAdjBars } from './returns';
+import { holdingReturn, toAdjBars } from './returns';
 import { toAlpacaSymbol } from './store';
 
 const VOLUME_SESSIONS = 30;
@@ -81,3 +81,42 @@ export async function loadSignalPerformance(
   return { horizons: [...byHorizon.values()], costPct, chart };
 }
 
+
+export interface ReturnToDate {
+  returnPct: number;
+  excessPct: number | null;
+  through: string;
+}
+
+/**
+ * Where each signal stands now: entry open to the latest close, against SPY over the same dates.
+ * Signals whose entry day hasn't arrived, or with no bars, are absent from the result.
+ */
+export async function loadReturnsToDate(
+  db: Db,
+  items: Array<{ id: string; ticker: string | null; entryDate: string | null }>,
+): Promise<Map<string, ReturnToDate>> {
+  const out = new Map<string, ReturnToDate>();
+  const wanted = items.filter((i): i is { id: string; ticker: string; entryDate: string } => !!i.ticker && !!i.entryDate);
+  if (!wanted.length) return out;
+
+  const symbols = [...new Set([...wanted.map((w) => toAlpacaSymbol(w.ticker)), 'SPY'])];
+  const rows = await db.select().from(priceBars).where(inArray(priceBars.ticker, symbols)).orderBy(asc(priceBars.date));
+  const byTicker = new Map<string, typeof rows>();
+  for (const r of rows) byTicker.set(r.ticker, [...(byTicker.get(r.ticker) ?? []), r]);
+
+  const adj = (ticker: string) =>
+    toAdjBars((byTicker.get(ticker) ?? []).map((r) => ({ date: r.date, open: Number(r.open), high: Number(r.high), low: Number(r.low), close: Number(r.close), volume: r.volume, adjClose: Number(r.adjClose) })));
+  const spy = adj('SPY');
+
+  for (const w of wanted) {
+    const stock = adj(toAlpacaSymbol(w.ticker));
+    const last = stock.at(-1);
+    if (!last) continue;
+    const held = holdingReturn(stock, w.entryDate, last.date);
+    if (!held) continue;
+    const bench = holdingReturn(spy, w.entryDate, held.exitDate);
+    out.set(w.id, { returnPct: held.returnPct, excessPct: bench ? held.returnPct - bench.returnPct : null, through: held.exitDate });
+  }
+  return out;
+}

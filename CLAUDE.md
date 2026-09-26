@@ -137,6 +137,26 @@ There is no Row Level Security, so access control is entirely in code:
   cap governs the scheduled job; the monthly budget also blocks manual re-scores. Spend shows on `/system`.
 - Feature flags (`lib/flags.ts`) are read from `settings` (`feature_flags`); `agent_scoring` is on by default.
 
+## Analytics and pages (milestone 7)
+
+- `lib/analytics/` is pure and tested: `stats.ts` (mean/median/hit rate/t-stat; **buckets under 20 observations are
+  "insufficient data"**, never numbers), `facts.ts` (a `SignalFact` per signal; `excessAt` counts only *complete* outcomes and
+  subtracts the cost tier when net), `gates.ts` (spec §11), `dashboard.ts`. `load.ts` reads everything in a few queries.
+- Only complete outcomes count anywhere; pending and data_ended are excluded. Score "deciles" are 10-point bands (LLM scores
+  clump on round numbers, so rank deciles would split ties arbitrarily). Top tiers: agent >= 70, baseline top third (ties at
+  the boundary are included). Correlation is Spearman.
+- Evaluation gates always use post-cutoff signals, net of costs, at 30 days, whatever the page toggles say. Gate 2 uses the
+  union tier (agent >= 70 or baseline top third). Gate 3 passes either way once both tiers have 20+ signals ("agent wins" or
+  "drop the agent"). Gate 4 is "insufficient" until the pipeline has 30 days of history, then needs parse errors < 1% and
+  successful-ingest weekdays > 95%.
+- Prices are stored only for tickers that have a signal. So company charts and insider track records have no returns for
+  other tickers; the UI says so rather than showing made-up numbers.
+- Charts are hand-written SVG (`components/charts/`, `price-chart.tsx`, `company-chart.tsx`): hover/keyboard tooltip, a table
+  view, series colours from `--viz-*` tokens (validated with the dataviz palette check), and shape or sign never colour alone.
+- `signals.avg_dollar_volume` (set by compute-outcomes) picks the round-trip cost tier for net returns.
+- Market cap is still empty (no data source wired), so the market-cap rule filter and the size-vs-market-cap score component
+  are inactive; the score redistributes their weight.
+
 ## Rules that are easy to get wrong
 
 - **Timing:** all return math keys off the filing's **acceptance datetime** (`filings.accepted_at`), not the

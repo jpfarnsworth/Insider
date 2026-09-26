@@ -77,6 +77,8 @@ export const signals = pgTable(
     signalAt: timestamp('signal_at', { withTimezone: true }).notNull(),
     entryDate: date('entry_date'),
     entryPrice: numeric('entry_price', { precision: 20, scale: 4 }),
+    // Mean close x volume over the 30 sessions before entry: picks the round-trip cost tier (spec §7).
+    avgDollarVolume: numeric('avg_dollar_volume', { precision: 24, scale: 2 }),
     baselineScore: numeric('baseline_score', { precision: 5, scale: 2 }),
     baselineVersion: integer('baseline_version'),
     // Per-component points and notes, so the score can be explained (spec §5.1).

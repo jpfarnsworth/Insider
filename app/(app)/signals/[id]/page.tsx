@@ -8,7 +8,9 @@ import { roleOf, type BaselineResult } from '@/lib/scoring/baseline';
 import { formatDateTime, formatDay, formatFullDay, formatNumber, formatPrice, formatUsd } from '@/lib/format';
 import { ScoreBadge } from '@/components/score-badge';
 import { AgentPanel } from './agent-panel';
+import { Context } from './context';
 import { Performance } from './performance';
+import { WatchlistButton } from '@/components/watchlist-button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -50,6 +52,7 @@ export default async function SignalDetailPage({ params }: { params: Promise<{ i
   const [signal] = await db
     .select({
       id: signals.id,
+      issuerCik: signals.issuerCik,
       clusterId: signals.clusterId,
       signalAt: signals.signalAt,
       score: signals.baselineScore,
@@ -121,6 +124,9 @@ export default async function SignalDetailPage({ params }: { params: Promise<{ i
           {signal.ticker ? <h1 className="font-mono text-2xl font-semibold tracking-tight">{signal.ticker}</h1> : null}
           <span className="text-muted-foreground text-lg">{signal.issuer}</span>
           <Badge variant={signal.status === 'active' ? 'secondary' : 'outline'}>{signal.status === 'active' ? 'Active' : 'Closed'}</Badge>
+          <span className="ml-auto">
+            <WatchlistButton issuerCik={signal.issuerCik} />
+          </span>
         </div>
         <p className="text-muted-foreground mt-1 text-sm">
           The market could first know on <span className="text-foreground">{formatDateTime(signal.signalAt)} CT</span>, when{' '}
@@ -222,6 +228,8 @@ export default async function SignalDetailPage({ params }: { params: Promise<{ i
       <Performance
         signal={{ id: signal.id, ticker: signal.ticker, entryDate: signal.entryDate, entryPrice: signal.entryPrice, status: signal.signalStatus }}
       />
+
+      <Context signalId={signal.id} issuerCik={signal.issuerCik} signalAt={signal.signalAt} latestEvalId={signal.latestAgentEvalId} />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>

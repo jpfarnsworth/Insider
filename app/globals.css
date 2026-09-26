@@ -94,6 +94,10 @@
   /* Chart series (validated with the dataviz palette check): the stock is the accent, the benchmark recedes. */
   --viz-stock: #378add;
   --viz-bench: #8a877f;
+  /* Series slots for multi-series charts: blue, orange, and a recessive gray for the context series. */
+  --viz-1: #378add;
+  --viz-2: #eb6834;
+  --viz-3: #8a877f;
 
   /* Status pairs: tinted background + darker text. */
   --positive-bg: #e1f5ee;
@@ -141,6 +145,9 @@
 
   --viz-stock: #3987e5;
   --viz-bench: #a09d94;
+  --viz-1: #3987e5;
+  --viz-2: #d95926;
+  --viz-3: #a09d94;
 
   --positive-bg: rgba(15, 110, 86, 0.2);
   --positive-fg: #5eead4;
