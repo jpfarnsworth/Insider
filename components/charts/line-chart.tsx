@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { niceTicks } from './scale';
+import { formatValue, formatX as resolveX, type ValueFormat, type XFormat } from './formats';
 
 export interface LineSeries {
   key: string;
@@ -13,8 +14,8 @@ export interface LineSeries {
 
 interface Props {
   series: LineSeries[];
-  format: (v: number) => string;
-  formatX: (x: number) => string;
+  format: ValueFormat;
+  formatX: XFormat;
   measure: string;
   /** Draw a hairline at y = 0 (returns) or leave the axis to the data (rates). */
   zeroLine?: boolean;
@@ -32,8 +33,10 @@ const PLOT_H = H - M.t - M.b;
  * Time lines, 2px, with a crosshair that snaps to the nearest date and one tooltip listing every
  * series there. Empty periods are gaps, not interpolated. Values are also in the table view.
  */
-export function LineChart({ series, format, formatX, measure, zeroLine = false, domain }: Props) {
+export function LineChart({ series, format: valueFormat, formatX: xFormat, measure, zeroLine = false, domain }: Props) {
   const [hover, setHover] = useState<number | null>(null);
+  const format = (v: number) => formatValue(valueFormat, v);
+  const formatX = (x: number) => resolveX(xFormat, x);
 
   const xs = [...new Set(series.flatMap((s) => s.points.map((p) => p.x)))].sort((a, b) => a - b);
   const ys = series.flatMap((s) => s.points.map((p) => p.y));

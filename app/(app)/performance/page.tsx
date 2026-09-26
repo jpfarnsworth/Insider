@@ -20,7 +20,7 @@ import { loadPipelineHealth, loadSignalFacts } from '@/lib/analytics/load';
 import { histogram, MIN_N, rollingHitRate, SCORE_BANDS, summarize } from '@/lib/analytics/stats';
 import { requireUser } from '@/lib/auth/require-user';
 import { COSTS_KEY, costsSchema } from '@/lib/market/costs';
-import { formatDay, formatPct, formatRate } from '@/lib/format';
+import { formatPct, formatRate } from '@/lib/format';
 import { getSetting } from '@/lib/settings';
 import { BarChart } from '@/components/charts/bar-chart';
 import { LineChart } from '@/components/charts/line-chart';
@@ -169,7 +169,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
               <BarChart
                 categories={[...bands]}
                 measure={`Mean ${unit}`}
-                format={(v) => formatPct(v, 1)}
+                format={{ kind: 'pct', digits: 1 }}
                 series={[
                   { key: 'baseline', label: 'Baseline', color: 'var(--viz-1)', values: bands.map((b) => bandValue(baseBands, b)), counts: bands.map((b) => baseBands.get(b)?.n ?? 0) },
                   { key: 'agent', label: 'Agent', color: 'var(--viz-2)', values: bands.map((b) => bandValue(agentBands, b)), counts: bands.map((b) => agentBands.get(b)?.n ?? 0) },
@@ -191,7 +191,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
               <BarChart
                 categories={calib.map((c) => c.key)}
                 measure="Hit rate"
-                format={(v) => `${Math.round(v * 100)}%`}
+                format={{ kind: 'ratio' }}
                 emptyText="Insufficient data"
                 series={[{ key: 'hit', label: 'Hit rate', color: 'var(--viz-1)', values: calib.map((c) => (c.summary.sufficient ? c.summary.hitRate : null)), counts: calib.map((c) => c.summary.n) }]}
               />
@@ -213,7 +213,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
               <BarChart
                 categories={bins.map((b) => `${b.from}`)}
                 measure="Signals"
-                format={(v) => String(Math.round(v))}
+                format={{ kind: 'int' }}
                 labelEvery={4}
                 series={[{ key: 'count', label: 'Signals', color: 'var(--viz-1)', values: bins.map((b) => b.count) }]}
               />
@@ -232,8 +232,8 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
             <LineChart
               measure="Hit rate"
               domain={[0, 1]}
-              format={(v) => `${Math.round(v * 100)}%`}
-              formatX={(x) => formatDay(new Date(x).toISOString().slice(0, 10))}
+              format={{ kind: 'ratio' }}
+              formatX="day"
               series={[{ key: 'hit', label: 'Hit rate', color: 'var(--viz-1)', points: rolling.map((r) => ({ x: r.at, y: r.hitRate, n: r.n })) }]}
             />
           </CardContent>

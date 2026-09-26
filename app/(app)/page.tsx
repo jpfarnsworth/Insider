@@ -148,8 +148,8 @@ export default async function DashboardPage() {
               <LineChart
                 measure="Cumulative excess"
                 zeroLine
-                format={(v) => formatPct(v, 0)}
-                formatX={(x) => formatDay(new Date(x).toISOString().slice(0, 10))}
+                format={{ kind: 'pct', digits: 0 }}
+                formatX="day"
                 series={lines.map((l) => ({ key: l.key, label: l.label, color: LINE_COLOR[l.key], points: l.points }))}
               />
             ) : (
@@ -168,7 +168,7 @@ export default async function DashboardPage() {
               <BarChart
                 categories={HORIZON_LIST.map((h) => `${h}d`)}
                 measure="Mean net excess vs SPY"
-                format={(v) => formatPct(v, 1)}
+                format={{ kind: 'pct', digits: 1 }}
                 series={horizons.map((h) => ({ key: h.key, label: h.label, color: LINE_COLOR[h.key], values: h.means, counts: h.counts }))}
               />
             ) : (

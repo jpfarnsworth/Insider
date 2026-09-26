@@ -171,5 +171,7 @@ There is no Row Level Security, so access control is entirely in code:
 ## Deployment
 
 Dev runs on this Raspberry Pi under PM2 (`ecosystem.config.js`, app `insider-signals-dev`) behind nginx
-(`insider-dev.nginx`, port 3040) and is served at `insider.jpfarnsworth.com` for now (`AUTH_URL` matches). Prod
+(`insider-dev.nginx`, port 3040) and is served at `insider.jpfarnsworth.com` for now (`AUTH_URL` matches). PM2 runs `next start` on the production build, so after changing code run `npm run build` and then `pm2 restart insider-signals-dev`; a restart alone serves the old build.
+Server components can't pass functions to client components (charts take format specs from `components/charts/formats.ts`); typecheck doesn't catch this, only loading the page does.
+Prod
 will be Amazon Lightsail; move the prod hostname there when it exists. Ports 3000–3005, 3010, 3020, 3021, 3033 belong to other projects.

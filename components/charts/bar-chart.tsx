@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { barPath, niceTicks } from './scale';
+import { formatValue, type ValueFormat } from './formats';
 
 export interface BarSeries {
   key: string;
@@ -17,7 +18,7 @@ export interface BarSeries {
 interface Props {
   categories: string[];
   series: BarSeries[];
-  format: (v: number) => string;
+  format: ValueFormat;
   /** What the value axis measures, for the screen-reader label and table caption. */
   measure: string;
   /** Show every k-th category label (dense axes such as histograms). */
@@ -39,8 +40,9 @@ const GAP = 2;
  * neighbours). The whole category column is the hover/focus target, so no pixel-hunting; every
  * value is also in the table view, so the tooltip never gates information.
  */
-export function BarChart({ categories, series, format, measure, labelEvery = 1, emptyText = 'Insufficient data' }: Props) {
+export function BarChart({ categories, series, format: valueFormat, measure, labelEvery = 1, emptyText = 'Insufficient data' }: Props) {
   const [active, setActive] = useState<number | null>(null);
+  const format = (v: number) => formatValue(valueFormat, v);
 
   const all = series.flatMap((s) => s.values).filter((v): v is number => v !== null);
   const lo = Math.min(0, ...all);
