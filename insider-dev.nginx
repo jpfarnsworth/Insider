@@ -1,6 +1,6 @@
 server {
     listen 3007 ssl;
-    server_name insider-dev.jpfarnsworth.com;
+    server_name insider.jpfarnsworth.com;
     include snippets/ssl.conf;
 
     include snippets/security-headers.conf;
