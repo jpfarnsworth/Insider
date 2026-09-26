@@ -63,3 +63,12 @@ export const watchlist = pgTable('watchlist', {
   addedAt: timestamp('added_at', { withTimezone: true }).notNull().defaultNow(),
   ...timestamps,
 });
+
+// Trading calendar cached from Alpaca (spec §13): holidays and early closes.
+export const marketDays = pgTable('market_days', {
+  date: date('date').primaryKey(),
+  // Eastern wall-clock HH:MM.
+  open: text('open').notNull(),
+  close: text('close').notNull(),
+  ...timestamps,
+});

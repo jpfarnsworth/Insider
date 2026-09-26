@@ -79,6 +79,8 @@ export const signals = pgTable(
     entryPrice: numeric('entry_price', { precision: 20, scale: 4 }),
     baselineScore: numeric('baseline_score', { precision: 5, scale: 2 }),
     baselineVersion: integer('baseline_version'),
+    // Per-component points and notes, so the score can be explained (spec §5.1).
+    baselineBreakdown: jsonb('baseline_breakdown'),
     // Points at agent_evaluations.id; intentionally not an FK to avoid a
     // circular dependency between the two tables.
     latestAgentEvalId: uuid('latest_agent_eval_id'),

@@ -18,6 +18,17 @@ export interface MappedFiling {
 
 export type ParseOutcome = { parsed: ParsedForm4 } | { error: string };
 
+const PLACEHOLDER_SYMBOLS = new Set(['NONE', 'NA', 'N/A', 'NULL', 'UNKNOWN']);
+
+/**
+ * A filing's own trading symbol is only a fallback ticker, and filers put junk in the
+ * field ("NONE", "N/A", a CIK). Keep it only if it could be a real ticker.
+ */
+export function usableSymbol(symbol: string | null): string | null {
+  const s = symbol?.trim().toUpperCase() ?? '';
+  return /^[A-Z][A-Z0-9.-]{0,9}$/.test(s) && !PLACEHOLDER_SYMBOLS.has(s) ? s : null;
+}
+
 const str = (n: number | null) => (n === null ? null : String(n));
 
 /**
@@ -28,7 +39,7 @@ const str = (n: number | null) => (n === null ? null : String(n));
 export function mapFiling(url: string, sub: Submission, outcome: ParseOutcome): MappedFiling {
   const parsed = 'parsed' in outcome ? outcome.parsed : null;
   const issuer = parsed
-    ? { cik: normalizeCik(parsed.issuer.cik), name: parsed.issuer.name, industry: sub.issuer.industry, symbol: parsed.issuer.tradingSymbol }
+    ? { cik: normalizeCik(parsed.issuer.cik), name: parsed.issuer.name, industry: sub.issuer.industry, symbol: usableSymbol(parsed.issuer.tradingSymbol) }
     : { ...sub.issuer, symbol: null };
 
   const owners = (parsed?.owners ?? []).map((o) => ({ ...o, cik: normalizeCik(o.cik) }));

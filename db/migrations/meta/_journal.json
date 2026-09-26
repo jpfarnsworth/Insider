@@ -15,6 +15,20 @@
       "when": 1790307967583,
       "tag": "0001_heavy_tarantula",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790390176045,
+      "tag": "0002_organic_dreadnoughts",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790391101247,
+      "tag": "0003_same_nightshade",
+      "breakpoints": true
     }
   ]
 }

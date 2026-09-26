@@ -3,7 +3,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Submission } from '@/lib/edgar/filings';
 import { parseForm4 } from '@/lib/form4';
-import { mapFiling } from './map-filing';
+import { usableSymbol, mapFiling } from './map-filing';
 
 const DIR = path.join(process.cwd(), 'tests', 'fixtures');
 const manifest: Array<{ file: string; accession: string; form: string; case: string }> = JSON.parse(
@@ -91,5 +91,19 @@ describe('mapFiling', () => {
     expect(m.transactions).toEqual([]);
     expect(m.insiders).toEqual([]);
     expect(m.originalSubmissionDate).toBeNull();
+  });
+});
+
+describe('usableSymbol', () => {
+  it('keeps plausible tickers, uppercased', () => {
+    expect(usableSymbol('gme')).toBe('GME');
+    expect(usableSymbol(' BRK-B ')).toBe('BRK-B');
+    expect(usableSymbol('BRK.B')).toBe('BRK.B');
+  });
+
+  it('drops placeholders and junk', () => {
+    for (const junk of ['NONE', 'none', 'N/A', 'NA', '[NONE]', '1314152', '', '  ', null, 'TOO LONG TICKER']) {
+      expect(usableSymbol(junk)).toBeNull();
+    }
   });
 });

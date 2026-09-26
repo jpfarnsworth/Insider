@@ -20,7 +20,9 @@ export default async function SignInPage({
     <main className="flex min-h-screen items-center justify-center p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle>Insider Signals</CardTitle>
+          <CardTitle className="text-lg">
+            Insider <span className="text-primary">Signals</span>
+          </CardTitle>
           <CardDescription>Sign in to continue.</CardDescription>
         </CardHeader>
         <CardContent>

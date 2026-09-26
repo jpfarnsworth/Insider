@@ -9,7 +9,9 @@ import { requireUser } from '@/lib/auth/require-user';
 import { reparseFiling } from '@/lib/ingest/store';
 import { JOB_NAMES, type JobName } from '@/worker/job-names';
 
+// A run counts as still going for this long; the backfill takes hours.
 const RECENT_MS = 60 * 60 * 1000;
+const LONG_JOB_MS: Partial<Record<JobName, number>> = { backfill: 12 * RECENT_MS };
 
 export async function retryParse(formData: FormData) {
   await requireUser();
@@ -27,7 +29,7 @@ export async function runJobNow(formData: FormData) {
   const [running] = await db
     .select({ id: jobRuns.id })
     .from(jobRuns)
-    .where(and(eq(jobRuns.jobName, name), eq(jobRuns.status, 'running'), gt(jobRuns.startedAt, new Date(Date.now() - RECENT_MS))))
+    .where(and(eq(jobRuns.jobName, name), eq(jobRuns.status, 'running'), gt(jobRuns.startedAt, new Date(Date.now() - (LONG_JOB_MS[name as JobName] ?? RECENT_MS)))))
     .limit(1);
   if (!running) {
     spawn('npm', ['run', 'worker', '--', name], { cwd: process.cwd(), detached: true, stdio: 'ignore' }).unref();

@@ -139,3 +139,56 @@ describe('createEdgarClient', () => {
     expect(client.getText).toBeTypeOf('function');
   });
 });
+
+describe('request timeout', () => {
+  // A fetch that never answers until its signal aborts, like a stalled connection.
+  const hang = (_url: string, init?: RequestInit) =>
+    new Promise<Response>((_, reject) => init?.signal?.addEventListener('abort', () => reject(init.signal?.reason)));
+
+  it('aborts a hung request and retries it', async () => {
+    let calls = 0;
+    const fetchImpl = vi.fn((url: string, init?: RequestInit) => (++calls === 1 ? hang(url, init) : Promise.resolve(respond(200, 'ok'))));
+    const client = createEdgarClient({
+      userAgent: UA,
+      limiter: noLimit,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      timeoutMs: 5,
+      sleep: async () => {},
+    });
+    expect(await client.getText('https://www.sec.gov/x')).toBe('ok');
+    expect(calls).toBe(2);
+  });
+
+  it('gives up with an EdgarError when every attempt hangs', async () => {
+    const client = createEdgarClient({
+      userAgent: UA,
+      limiter: noLimit,
+      fetchImpl: hang as unknown as typeof fetch,
+      timeoutMs: 5,
+      maxRetries: 1,
+      sleep: async () => {},
+    });
+    await expect(client.getText('https://www.sec.gov/x')).rejects.toThrow(EdgarError);
+  });
+
+  it('retries when the body stalls after the headers arrive', async () => {
+    let calls = 0;
+    const stalled = (init?: RequestInit) => {
+      const body = new ReadableStream({
+        start(controller) {
+          init?.signal?.addEventListener('abort', () => controller.error(init.signal?.reason));
+        },
+      });
+      return new Response(body, { status: 200 });
+    };
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => (++calls === 1 ? stalled(init) : respond(200, 'done')));
+    const client = createEdgarClient({
+      userAgent: UA,
+      limiter: noLimit,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      timeoutMs: 5,
+      sleep: async () => {},
+    });
+    expect(await client.getText('https://www.sec.gov/x')).toBe('done');
+  });
+});

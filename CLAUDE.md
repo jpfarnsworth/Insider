@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 Insider Signals: a single-user research platform that ingests SEC Form 4 filings, detects clusters of insider
-open-market purchases, scores them (deterministic baseline + Claude agent), and tracks forward returns vs. SPY.
+open-market purchases, scores them (deterministic baseline + an LLM agent, Gemini 2.5 Flash), and tracks forward returns vs. SPY.
 **Phase 1 has no trading of any kind.** The full spec is GitHub issue #1 on `jpfarnsworth/Trader`; read it before
 changing behavior. Build order is spec §14 (milestones 1–9).
 
@@ -25,12 +25,18 @@ npm run db:studio
 npm run set-password   # set/change the sign-in password (needs a real terminal)
 npm run worker -- refresh-tickers
 npm run worker -- ingest-daily-index [--dates=YYYYMMDD,...] [--days=N]   # default: last 3 weekdays
+npm run worker -- backfill [--from=YYYY-MM-DD --to=YYYY-MM-DD]   # default: 2 years back; resumable, newest first
+npm run worker -- detect-clusters   # rebuild clusters/signals; idempotent (also runs after ingest and backfill)
+npm run worker -- score-baseline [--force]   # score new signals, or all of them with --force
+npm run worker -- refresh-prices   # trading calendar + daily bars (Alpaca) for signal tickers, SPY, IWM
+npm run worker -- score-agent [--limit=N]   # Gemini evaluations under the daily cap; --limit overrides the cap for one run
+npm run worker -- compute-outcomes   # forward returns for matured horizons
 npm run fixtures:fetch -- YYYYMMDD ...   # re-download real Form 4 fixtures (see tests/fixtures)
 ```
 
 ## Architecture
 
-- **Stack:** Next.js 16 App Router, React 19, TypeScript, Tailwind v4 + shadcn/ui (dark by default), Drizzle ORM on
+- **Stack:** Next.js 16 App Router, React 19, TypeScript, Tailwind v4 + shadcn/ui (warm light theme by default, blue accent, DM Sans; tokens shared with Life OS/Tasks), Drizzle ORM on
   AWS PostgreSQL via `pg`, Auth.js v5, Vitest. npm, not pnpm/yarn.
 - **Layout:** `app/` routes, `components/`, `lib/` shared code (`db`, `auth`, `edgar`, `form4`, `clusters`, `agent`),
   `worker/` scheduled jobs, `db/schema` (source of truth), `db/migrations` (generated), `tests/fixtures` (real Form 4 XML).
@@ -76,11 +82,60 @@ There is no Row Level Security, so access control is entirely in code:
   shared owner + that date (`lib/ingest/store.ts`); unlinked amendments are retried at the end of every ingest.
 - **Joint filings:** each transaction is stored once, attributed to the filing's first owner; other owners are in
   `filing_owners`. Real data shows the same purchase can also arrive in *separate* filings by related filers (a fund
-  and its adviser both reported the same 1,000,000 shares at $15). Cluster detection (milestone 4) must dedupe
-  identical transactions across filings and not count related entities as distinct insiders.
+  and its adviser both reported the same 1,000,000 shares at $15). Cluster detection dedupes
+  identical transactions across filings so related entities don't count as distinct insiders.
 - Filers abbreviate security titles ("Comm Stock - $.16-2/3 value"); see `lib/form4/normalize.ts`.
 - `ticker` comes from `refresh-tickers` (SEC's company_tickers_exchange.json). A filing's own trading symbol is only
   a fallback for issuers not in that file and never overwrites it.
+
+## Clusters and scoring (milestone 4)
+
+- `lib/clusters/detect.ts` is pure and deterministic (per issuer); `lib/clusters/store.ts` loads purchases and reconciles
+  the result into `clusters`, `cluster_transactions`, `cluster_events` and `signals`. Parameters live in `settings`
+  (`cluster_rule`), defaults in `lib/clusters/rule.ts`; bump `CLUSTER_RULE_VERSION` when the logic (not a parameter) changes.
+- Purchases arrive in acceptance order; the signal time is the acceptance of the filing that first completed the rule and
+  never moves after creation. Identical transactions in different filings (fund + adviser) count once, and a filing that a
+  parsed 4/A amends is replaced by the amendment's transactions.
+- A stored cluster that detection no longer produces is left alone, never deleted, because its signal may carry scores.
+- `lib/scoring/baseline.ts` is the deterministic score (weights in `settings` as `baseline_weights`, breakdown stored in
+  `signals.baseline_breakdown`). Components without data (e.g. market cap, still empty) are re-weighted, not zeroed.
+  Bump `BASELINE_VERSION` when the formula changes; `score-baseline` re-scores older versions. v2 adds the price-context
+  component in milestone 5. Sales counted against a signal are limited to filings accepted by the signal time.
+
+## Prices and outcomes (milestone 5)
+
+- Alpaca client `lib/alpaca/client.ts` (3 req/s, backoff). Feed is SIP by default (`ALPACA_DATA_FEED=iex` for the free
+  feed, which omits days with no IEX trades). The free plan refuses SIP for the latest day, so the end date steps back
+  automatically and prices lag by about one session. Calendar comes from Alpaca and is cached in `market_days`.
+- `price_bars` holds raw OHLCV plus `adj_close`. Adjusted history is restated by later splits/dividends, so
+  `refresh-prices` compares the overlap with what is stored and refetches a ticker's whole history on any drift.
+  Adjusted open = open x adj_close/close.
+- Entry = first session whose open is after `accepted_at` (`lib/market/calendar.ts`). Horizons 5/10/30/60/90 count the entry
+  day as day 1; exit is that day's close. Excess = stock return minus SPY or IWM return over the same dates. Max drawdown is
+  close-based, the peak starting at the entry price. A ticker whose data ends keeps its signal as `data_ended`.
+- `compute-outcomes` recomputes everything and writes only changed rows. Net returns subtract a round-trip cost at display
+  time (`lib/market/costs.ts`: 0.30%, or 1.0% below $1M average daily dollar volume or with unknown volume).
+- Ticker fallbacks from a filing's own symbol are filtered (`usableSymbol`): filers write NONE, N/A and CIKs there.
+- After ingest and backfill the worker chains: detect-clusters, refresh-prices, score-baseline, compute-outcomes. Each is its
+  own `job_runs` row and one failing does not skip the rest.
+
+## Agent scoring (milestone 6)
+
+- One model, `gemini-2.5-flash` (`lib/agent/models.ts`, which also holds its training cutoff). `lib/agent/provider.ts` is the
+  interface, `gemini.ts` the implementation (key in an `x-goog-api-key` header, JSON-constrained output, thinking budget capped,
+  timeout and backoff). Changing the model means changing that file, and adding its cutoff.
+- The input bundle (`bundle.ts`) is built in code as of the signal time: purchases with roles and footnotes, the insiders' prior
+  history in that issuer (3 years), other insiders' 90-day sales, price context from bars strictly before the signal's Eastern
+  day, and 8-K titles from EDGAR submissions (only filings accepted by then). It never contains the baseline score, so the two
+  scorers stay independent. Filing text in it is untrusted; the prompt says so, and the model has no tools.
+- Output is Zod-validated (`schema.ts`). Invalid JSON is retried once with the error fed back, then stored as `agent_failed`.
+  An evaluation never throws into the pipeline. Prompts are versioned files in `lib/agent/prompts/`: add v2, never edit v1.
+- Evaluations are only ever inserted, never updated. `signals.latest_agent_eval_id` points at the latest successful one.
+  "Re-score with current prompt" (signal page) adds a new row. Pending signals are picked post-cutoff first (only those count
+  toward the gates), newest first; a signal that failed 3 times, or in the last 6 hours, is skipped.
+- Limits live in `settings` (`agent_limits`: daily cap 50, monthly token budget, per-token prices for the estimate). The daily
+  cap governs the scheduled job; the monthly budget also blocks manual re-scores. Spend shows on `/system`.
+- Feature flags (`lib/flags.ts`) are read from `settings` (`feature_flags`); `agent_scoring` is on by default.
 
 ## Rules that are easy to get wrong
 
@@ -96,5 +151,5 @@ There is no Row Level Security, so access control is entirely in code:
 ## Deployment
 
 Dev runs on this Raspberry Pi under PM2 (`ecosystem.config.js`, app `insider-signals-dev`) behind nginx
-(`insider-dev.nginx`, `insider-dev.jpfarnsworth.com`, port 3040). Prod is Amazon Lightsail
-(`insider.jpfarnsworth.com`). Ports 3000–3005, 3010, 3020, 3021, 3033 belong to other projects.
+(`insider-dev.nginx`, port 3040) and is served at `insider.jpfarnsworth.com` for now (`AUTH_URL` matches). Prod
+will be Amazon Lightsail; move the prod hostname there when it exists. Ports 3000–3005, 3010, 3020, 3021, 3033 belong to other projects.

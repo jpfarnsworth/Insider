@@ -19,3 +19,34 @@ export function formatDuration(start: Date, end: Date | null): string {
   const s = Math.round((end.getTime() - start.getTime()) / 1000);
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
 }
+
+const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+const usdPrice = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const int = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
+const shortDate = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' });
+
+/** Whole dollars, e.g. "$1,250,000". Accepts numeric strings from Postgres. */
+export function formatUsd(v: string | number | null | undefined): string {
+  return v == null ? '—' : usd.format(Number(v));
+}
+
+/** Per-share price with cents, e.g. "$15.00". */
+export function formatPrice(v: string | number | null | undefined): string {
+  return v == null ? '—' : usdPrice.format(Number(v));
+}
+
+export function formatNumber(v: string | number | null | undefined): string {
+  return v == null ? '—' : int.format(Number(v));
+}
+
+/** A `date` column (YYYY-MM-DD) as "Sep 23". */
+export function formatDay(d: string | null | undefined): string {
+  return d ? shortDate.format(new Date(`${d}T00:00:00Z`)) : '—';
+}
+
+const fullDate = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric' });
+
+/** A `date` column (YYYY-MM-DD) as "Sep 23, 2026". */
+export function formatFullDay(d: string | null | undefined): string {
+  return d ? fullDate.format(new Date(`${d}T00:00:00Z`)) : '—';
+}

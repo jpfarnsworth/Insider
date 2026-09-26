@@ -29,6 +29,8 @@ export interface EdgarClientOptions {
   fetchImpl?: typeof fetch;
   maxRetries?: number;
   baseDelayMs?: number;
+  /** Abort a request (headers and body) that takes longer than this. */
+  timeoutMs?: number;
   sleep?: (ms: number) => Promise<void>;
   random?: () => number;
 }
@@ -39,6 +41,7 @@ export function createEdgarClient({
   fetchImpl = fetch,
   maxRetries = 5,
   baseDelayMs = 500,
+  timeoutMs = 30_000,
   sleep = (ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
   random = Math.random,
 }: EdgarClientOptions) {
@@ -55,14 +58,17 @@ export function createEdgarClient({
       let response: Response | undefined;
       let failure = '';
       try {
+        // The timeout covers the body as well: a connection that stalls mid-download
+        // must fail and retry, not hang the whole batch.
         response = await fetchImpl(url, {
           headers: { 'User-Agent': userAgent, 'Accept-Encoding': 'gzip, deflate' },
+          signal: AbortSignal.timeout(timeoutMs),
         });
+        if (response.ok) return await response.text();
       } catch (err) {
+        response = undefined;
         failure = err instanceof Error ? err.message : String(err);
       }
-
-      if (response?.ok) return response.text();
 
       const retryable = !response || RETRYABLE.has(response.status);
       if (!retryable || attempt >= maxRetries) {

@@ -2,7 +2,9 @@ import { desc, eq, getTableColumns, sql } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { filings, issuers, jobRuns } from '@/db/schema';
 import { requireUser } from '@/lib/auth/require-user';
-import { formatDateTime, formatDuration } from '@/lib/format';
+import { formatDateTime, formatDuration, formatNumber } from '@/lib/format';
+import { estimateCostUsd } from '@/lib/agent/models';
+import { agentUsage, loadAgentLimits } from '@/lib/agent/store';
 import { JOB_NAMES } from '@/worker/job-names';
 import { PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
@@ -26,7 +28,7 @@ function StatusBadge({ status, stale }: { status: string; stale: boolean }) {
 export default async function SystemPage() {
   await requireUser();
 
-  const [latestPerJob, runs, [stats], failures] = await Promise.all([
+  const [latestPerJob, runs, [stats], failures, usage, limits] = await Promise.all([
     db.selectDistinctOn([jobRuns.jobName], runColumns).from(jobRuns).orderBy(jobRuns.jobName, desc(jobRuns.startedAt)),
     db.select(runColumns).from(jobRuns).orderBy(desc(jobRuns.startedAt)).limit(25),
     db
@@ -53,6 +55,8 @@ export default async function SystemPage() {
       .where(eq(filings.parseStatus, 'failed'))
       .orderBy(desc(filings.acceptedAt))
       .limit(25),
+    agentUsage(db),
+    loadAgentLimits(db),
   ]);
 
   const latestByName = new Map(latestPerJob.map((r) => [r.jobName, r]));
@@ -113,6 +117,26 @@ export default async function SystemPage() {
             </div>
           ))}
         </dl>
+      </section>
+
+      <section aria-labelledby="agent" className="mb-8">
+        <h2 id="agent" className="mb-3 text-lg font-semibold">
+          Agent spend
+        </h2>
+        <dl className="grid gap-4 sm:grid-cols-4">
+          {[
+            ['Evaluations today', `${formatNumber(usage.evaluationsToday)} of ${formatNumber(limits.dailyCap)} cap`],
+            ['Tokens this month', `${formatNumber(usage.tokensThisMonth)} of ${formatNumber(limits.monthlyTokenBudget)}`],
+            ['Estimated cost, month', `$${estimateCostUsd(usage.tokensInMonth, usage.tokensOutMonth, limits).toFixed(2)}`],
+            ['Failed, month', `${formatNumber(usage.failedMonth)} of ${formatNumber(usage.evaluationsMonth)}`],
+          ].map(([label, value]) => (
+            <div key={label} className="bg-card rounded-lg border p-3">
+              <dt className="text-muted-foreground text-xs">{label}</dt>
+              <dd className="mt-1 font-mono text-lg tabular-nums">{value}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className="text-muted-foreground mt-2 text-xs">Cost is an estimate from the configured per-token prices; reasoning tokens are billed as output.</p>
       </section>
 
       <section aria-labelledby="runs" className="mb-8">

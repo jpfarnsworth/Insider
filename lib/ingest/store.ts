@@ -19,9 +19,11 @@ async function upsertParties(tx: Tx, m: MappedFiling) {
       set: { industry: sql`coalesce(excluded.industry, ${issuers.industry})` },
     });
   if (m.insiders.length) {
+    // Sorted so concurrent filings sharing insiders lock rows in the same order.
+    const sorted = [...m.insiders].sort((a, b) => a.cik.localeCompare(b.cik));
     await tx
       .insert(insiders)
-      .values(m.insiders)
+      .values(sorted)
       .onConflictDoUpdate({ target: insiders.cik, set: { name: sql`excluded.name` } });
   }
 }
@@ -55,8 +57,21 @@ async function findOriginal(tx: Tx | Db, issuerCik: string, ownerCiks: string[],
   return row?.accessionNo ?? null;
 }
 
-/** Stores a fetched filing and everything parsed from it. Idempotent on accession number. */
+const DEADLOCK = '40P01';
+const MAX_DEADLOCK_RETRIES = 3;
+
+/** Stores a fetched filing and everything parsed from it. Idempotent on accession number. Safe to call concurrently. */
 export async function storeFiling(db: Db, m: MappedFiling): Promise<StoreResult> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await storeFilingOnce(db, m);
+    } catch (err) {
+      if ((err as { code?: string }).code !== DEADLOCK || attempt >= MAX_DEADLOCK_RETRIES) throw err;
+    }
+  }
+}
+
+async function storeFilingOnce(db: Db, m: MappedFiling): Promise<StoreResult> {
   return db.transaction(async (tx) => {
     await upsertParties(tx, m);
 

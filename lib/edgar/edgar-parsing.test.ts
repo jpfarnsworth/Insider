@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chicagoToday, priorBusinessDays } from './dates';
+import { chicagoToday, priorBusinessDays, weekdaysBetween, yearsBefore } from './dates';
 import { dailyIndexUrl, normalizeCik, parseDailyIndex, parseSubmission } from './filings';
 import { parseTickerFile } from './tickers';
 import { easternToUtc } from './time';
@@ -182,5 +182,30 @@ describe('parseTickerFile', () => {
 
   it('returns nothing when the file has no data', () => {
     expect(parseTickerFile({})).toEqual([]);
+  });
+});
+
+describe('weekdaysBetween', () => {
+  it('lists weekdays newest first, inclusive, skipping weekends', () => {
+    // 2026-09-21 is a Monday.
+    expect(weekdaysBetween('2026-09-18', '2026-09-22')).toEqual(['20260922', '20260921', '20260918']);
+  });
+
+  it('returns a single day when from equals to', () => {
+    expect(weekdaysBetween('2026-09-23', '2026-09-23')).toEqual(['20260923']);
+  });
+
+  it('returns nothing for a weekend-only range', () => {
+    expect(weekdaysBetween('2026-09-19', '2026-09-20')).toEqual([]);
+  });
+});
+
+describe('yearsBefore', () => {
+  it('subtracts calendar years', () => {
+    expect(yearsBefore('2026-09-25', 2)).toBe('2024-09-25');
+  });
+
+  it('clamps Feb 29 to Feb 28', () => {
+    expect(yearsBefore('2028-02-29', 1)).toBe('2027-02-28');
   });
 });
