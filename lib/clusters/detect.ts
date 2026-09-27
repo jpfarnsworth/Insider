@@ -138,12 +138,16 @@ export function detectClusters(
   const ordered = dedupePurchases(eligible).sort(byArrival);
 
   const done: DetectedCluster[] = [];
-  const known: Purchase[] = [];
+  // Purchases seen so far, bucketed by transaction day (with arrival order), so a window only reads its own days.
+  const byDay = new Map<number, Array<{ p: Purchase; order: number }>>();
+  let seen = 0;
   let active: Building | null = null;
 
   for (const p of ordered) {
-    known.push(p);
     const pDay = dayNumber(p.transactionDate);
+    const day = byDay.get(pDay) ?? [];
+    day.push({ p, order: seen++ });
+    byDay.set(pDay, day);
 
     if (active) {
       const joins = pDay <= dayNumber(active.last) + rule.windowDays && pDay >= dayNumber(active.first) - rule.windowDays;
@@ -173,13 +177,12 @@ export function detectClusters(
     // Try every window (of windowDays consecutive dates) that contains this purchase.
     let best: Purchase[] | null = null;
     let bestKey: [number, number] = [-1, -1];
-    const starts = new Set(known.map((k) => dayNumber(k.transactionDate)).filter((d) => d <= pDay && d > pDay - rule.windowDays));
-    for (const start of [...starts].sort((a, b) => a - b)) {
-      const inWindow = known.filter((k) => {
-        const d = dayNumber(k.transactionDate);
-        return d >= start && d < start + rule.windowDays;
-      });
-      if (!inWindow.includes(p) || !meetsRule(inWindow, rule, marketCap)) continue;
+    for (let start = pDay - rule.windowDays + 1; start <= pDay; start++) {
+      if (!byDay.has(start)) continue; // windows begin on a day with a purchase
+      const entries: Array<{ p: Purchase; order: number }> = [];
+      for (let d = start; d < start + rule.windowDays; d++) entries.push(...(byDay.get(d) ?? []));
+      const inWindow = entries.sort((a, b) => a.order - b.order).map((e) => e.p);
+      if (!meetsRule(inWindow, rule, marketCap)) continue;
       const s = summarize(inWindow, rule);
       if (s.insiderCount > bestKey[0] || (s.insiderCount === bestKey[0] && s.totalValue > bestKey[1])) {
         best = inWindow;

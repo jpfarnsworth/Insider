@@ -28,6 +28,8 @@ export const clusters = pgTable(
     firstQualifiedAt: timestamp('first_qualified_at', { withTimezone: true }),
     triggerFilingId: uuid('trigger_filing_id').references(() => filings.id),
     ruleVersion: integer('rule_version').notNull(),
+    // Which saved revision of the cluster-rule parameters (setting_versions) last produced this cluster.
+    ruleRevision: integer('rule_revision').notNull().default(0),
     ...timestamps,
   },
   (t) => [index('clusters_issuer_cik_idx').on(t.issuerCik)],
@@ -81,6 +83,10 @@ export const signals = pgTable(
     avgDollarVolume: numeric('avg_dollar_volume', { precision: 24, scale: 2 }),
     baselineScore: numeric('baseline_score', { precision: 5, scale: 2 }),
     baselineVersion: integer('baseline_version'),
+    // Which saved revision of the baseline weights (setting_versions) produced the score.
+    baselineRevision: integer('baseline_revision'),
+    // Set once an alert for this signal has been sent (or deliberately skipped), so it never repeats.
+    alertedAt: timestamp('alerted_at', { withTimezone: true }),
     // Per-component points and notes, so the score can be explained (spec §5.1).
     baselineBreakdown: jsonb('baseline_breakdown'),
     // Points at agent_evaluations.id; intentionally not an FK to avoid a

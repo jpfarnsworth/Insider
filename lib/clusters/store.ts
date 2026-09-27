@@ -2,11 +2,13 @@ import { and, eq, exists, inArray, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { Db } from '@/lib/db';
 import { clusterEvents, clusters, clusterTransactions, filingOwners, filings, insiders, issuers, signals, transactions } from '@/db/schema';
-import { getSetting } from '@/lib/settings';
+import { getRevision, getSetting } from '@/lib/settings';
 import { detectClusters, type DetectedCluster, type Purchase } from './detect';
 import { CLUSTER_RULE_KEY, CLUSTER_RULE_VERSION, clusterRuleSchema, type ClusterRule } from './rule';
 
 const CHUNK = 100;
+// The preview is interactive and the database is a network hop away, so it reads in fewer, larger batches.
+const PREVIEW_CHUNK = 500;
 
 export function loadClusterRule(db: Db): Promise<ClusterRule> {
   return getSetting(db, CLUSTER_RULE_KEY, clusterRuleSchema);
@@ -105,7 +107,7 @@ const groupByTrigger = <T extends { triggerFilingId: string | null; windowStart:
  * detection no longer produces are left alone rather than deleting a signal
  * that may already carry scores.
  */
-async function reconcileIssuer(tx: Tx, issuerCik: string, detected: DetectedCluster[]) {
+async function reconcileIssuer(tx: Tx, issuerCik: string, detected: DetectedCluster[], ruleRevision: number) {
   const existing = await tx.select().from(clusters).where(eq(clusters.issuerCik, issuerCik));
   const existingByTrigger = groupByTrigger(existing);
   const seen = new Map<string, number>();
@@ -126,6 +128,7 @@ async function reconcileIssuer(tx: Tx, issuerCik: string, detected: DetectedClus
       firstQualifiedAt: new Date(d.signalAt),
       triggerFilingId: d.triggerFilingId,
       ruleVersion: CLUSTER_RULE_VERSION,
+      ruleRevision,
     };
 
     const match = existingByTrigger.get(d.triggerFilingId)?.[ordinal];
@@ -161,6 +164,7 @@ export interface DetectStats {
 /** Runs detection for every issuer that could form a cluster and stores the result. Idempotent. */
 export async function detectAndStoreClusters(db: Db, asOf: string, rule?: ClusterRule): Promise<DetectStats> {
   const r = rule ?? (await loadClusterRule(db));
+  const ruleRevision = await getRevision(db, CLUSTER_RULE_KEY);
   const ciks = await candidateIssuers(db, r.minInsiders);
   const stats: DetectStats = { issuersScanned: ciks.length, clusters: 0, created: 0, updated: 0 };
 
@@ -175,7 +179,7 @@ export async function detectAndStoreClusters(db: Db, asOf: string, rule?: Cluste
     for (const cik of chunk) {
       const detected = detectClusters(purchases.get(cik) ?? [], { rule: r, marketCap: capByCik.get(cik) ?? null, asOf });
       if (!detected.length) continue;
-      const res = await db.transaction((tx) => reconcileIssuer(tx, cik, detected));
+      const res = await db.transaction((tx) => reconcileIssuer(tx, cik, detected, ruleRevision));
       stats.clusters += detected.length;
       stats.created += res.created;
       stats.updated += res.updated;
@@ -184,6 +188,63 @@ export async function detectAndStoreClusters(db: Db, asOf: string, rule?: Cluste
   return stats;
 }
 
+
+export interface RulePreview {
+  /** Signals the saved rule produces from the purchases on file. */
+  current: number;
+  /** Signals the candidate rule would produce. */
+  candidate: number;
+  /**
+   * Companies with a signal under the candidate but none under the saved rule, and the reverse.
+   * Counted per company, not per signal: a looser rule usually fires earlier on the same buying,
+   * so comparing individual signals would report re-timed ones as added and dropped.
+   */
+  companiesGained: number;
+  companiesLost: number;
+  /** Signals already stored (never deleted, whatever the rule says). */
+  stored: number;
+}
+
+/**
+ * "Preview impact" (spec §9.10): how many historical signals a rule would produce, compared with
+ * the saved one. Runs detection in memory; nothing is written.
+ */
+export async function previewClusterRule(db: Db, candidate: ClusterRule, asOf: string): Promise<RulePreview> {
+  const current = await loadClusterRule(db);
+  const ciks = await candidateIssuers(db, Math.min(current.minInsiders, candidate.minInsiders));
+  let now = 0;
+  let next = 0;
+  const nowCiks = new Set<string>();
+  const nextCiks = new Set<string>();
+
+  for (let i = 0; i < ciks.length; i += PREVIEW_CHUNK) {
+    const chunk = ciks.slice(i, i + PREVIEW_CHUNK);
+    const [purchases, caps] = await Promise.all([
+      loadPurchases(db, chunk),
+      db.select({ cik: issuers.cik, marketCap: issuers.marketCap }).from(issuers).where(inArray(issuers.cik, chunk)),
+    ]);
+    const capByCik = new Map(caps.map((c) => [c.cik, c.marketCap === null ? null : Number(c.marketCap)]));
+    for (const cik of chunk) {
+      const list = purchases.get(cik) ?? [];
+      const marketCap = capByCik.get(cik) ?? null;
+      const a = detectClusters(list, { rule: current, marketCap, asOf }).length;
+      const b = detectClusters(list, { rule: candidate, marketCap, asOf }).length;
+      now += a;
+      next += b;
+      if (a) nowCiks.add(cik);
+      if (b) nextCiks.add(cik);
+    }
+  }
+
+  const [{ n: stored }] = await db.select({ n: sql<number>`count(*)::int` }).from(signals);
+  return {
+    current: now,
+    candidate: next,
+    companiesGained: [...nextCiks].filter((c) => !nowCiks.has(c)).length,
+    companiesLost: [...nowCiks].filter((c) => !nextCiks.has(c)).length,
+    stored,
+  };
+}
 
 export interface BuildingCluster {
   issuerCik: string;

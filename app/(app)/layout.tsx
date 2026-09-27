@@ -4,6 +4,7 @@ import { filings, priceBars } from '@/db/schema';
 import { requireUser } from '@/lib/auth/require-user';
 import { formatDateTime, formatFullDay } from '@/lib/format';
 import { signOut } from '@/auth';
+import { CommandPalette } from '@/components/command-palette';
 import { SidebarNav } from '@/components/sidebar-nav';
 import { Button } from '@/components/ui/button';
 
@@ -29,6 +30,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             Filings through {latest ? `${formatDateTime(new Date(latest))} CT` : '—'} · Prices through {formatFullDay(pricesThrough)}
           </span>
           <div className="flex items-center gap-3">
+            <CommandPalette />
             <span className="text-muted-foreground hidden sm:inline">{user.email}</span>
             <form
               action={async () => {

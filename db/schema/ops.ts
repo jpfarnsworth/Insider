@@ -9,6 +9,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { id, timestamps } from './_helpers';
 import { issuers } from './filings';
@@ -70,5 +71,27 @@ export const marketDays = pgTable('market_days', {
   // Eastern wall-clock HH:MM.
   open: text('open').notNull(),
   close: text('close').notNull(),
+  ...timestamps,
+});
+
+// Every saved change to a settings row, oldest first. `version` counts per key from 1; the
+// current value is still read from `settings`, so history can never break a job.
+export const settingVersions = pgTable(
+  'setting_versions',
+  {
+    id: id(),
+    key: text('key').notNull(),
+    version: integer('version').notNull(),
+    value: jsonb('value').notNull(),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex('setting_versions_key_version_idx').on(t.key, t.version)],
+);
+
+// Signals-list filter presets: `params` is the list's query string (see lib/signals/filters.ts).
+export const savedFilters = pgTable('saved_filters', {
+  id: id(),
+  name: text('name').notNull().unique(),
+  params: text('params').notNull(),
   ...timestamps,
 });

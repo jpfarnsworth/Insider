@@ -31,6 +31,7 @@ npm run worker -- score-baseline [--force]   # score new signals, or all of them
 npm run worker -- refresh-prices   # trading calendar + daily bars (Alpaca) for signal tickers, SPY, IWM
 npm run worker -- score-agent [--limit=N]   # Gemini evaluations under the daily cap; --limit overrides the cap for one run
 npm run worker -- compute-outcomes   # forward returns for matured horizons
+npm run worker -- alert-signals   # Telegram alerts for new signals at/above the score threshold (no-op unless notifications are on)
 npm run fixtures:fetch -- YYYYMMDD ...   # re-download real Form 4 fixtures (see tests/fixtures)
 ```
 
@@ -157,6 +158,28 @@ There is no Row Level Security, so access control is entirely in code:
 - Market cap is still empty (no data source wired), so the market-cap rule filter and the size-vs-market-cap score component
   are inactive; the score redistributes their weight.
 
+## Settings, search, export and alerts (milestone 8)
+
+- **Settings** (`/settings`) edits `cluster_rule`, `baseline_weights`, `trading_costs`, `display` (default benchmark), `agent_limits`,
+  `feature_flags` and `notifications` in `settings`. Save through `saveSetting` (`lib/settings.ts`): it validates with the
+  key's Zod schema, and every real change appends a numbered row to `setting_versions` (a save that changes nothing is a
+  no-op). `clusters.rule_revision` and `signals.baseline_revision` record which revision produced them. Saving never rewrites
+  history: the cluster rule applies to new detections (run detect-clusters to apply it to history) and new weights apply to
+  new signals until "Re-score all signals" (`score-baseline --force`) is pressed.
+- "Preview impact" (`previewClusterRule`) runs detection in memory and reports signals and companies gained/lost versus the
+  saved rule. It compares per company, because a looser rule fires earlier on the same buying, so per-signal add/drop counts are misleading.
+- **Signals list** filters live in `lib/signals/filters.ts` (pure, tested); the same query string drives the page, the CSV
+  (`/signals/export`) and saved presets (`saved_filters`). Filtering is in memory over `loadSignalRows`. No market-cap or
+  sector filter: no data source. CSV cells starting `= + - @` are prefixed with `'` (filings text is untrusted).
+- **Search** (⌘K / Ctrl+K, or `/`): `lib/search.ts` behind `/api/search` (401 JSON when unauthenticated, same check as
+  `requireUser`). Matches ticker/company, insider name and accession number.
+- **Notifications** are Telegram, send-only (`lib/notify/`), like the Tasks/Life OS bots but its own bot: `TELEGRAM_BOT_TOKEN`
+  and `TELEGRAM_CHAT_ID` in `.env.local`, plus the `notifications` flag. Job failures notify from `runJob`'s `onFailure`;
+  `alert-signals` (chained after ingest and after a standalone `score-agent`) alerts once per signal
+  (`signals.alerted_at`) when the baseline or agent score reaches the threshold, only for signals under 3 days old so enabling
+  it never replays history. Messages are HTML-escaped; errors never include the bot token.
+- The dashboard still compares against SPY; the default-benchmark setting drives Performance and the signals list.
+
 ## Rules that are easy to get wrong
 
 - **Timing:** all return math keys off the filing's **acceptance datetime** (`filings.accepted_at`), not the
@@ -171,7 +194,7 @@ There is no Row Level Security, so access control is entirely in code:
 ## Deployment
 
 Dev runs on this Raspberry Pi under PM2 (`ecosystem.config.js`, app `insider-signals-dev`) behind nginx
-(`insider-dev.nginx`, port 3040) and is served at `insider.jpfarnsworth.com` for now (`AUTH_URL` matches). PM2 runs `next start` on the production build, so after changing code run `npm run build` and then `pm2 restart insider-signals-dev`; a restart alone serves the old build.
-Server components can't pass functions to client components (charts take format specs from `components/charts/formats.ts`); typecheck doesn't catch this, only loading the page does.
-Prod
-will be Amazon Lightsail; move the prod hostname there when it exists. Ports 3000–3005, 3010, 3020, 3021, 3033 belong to other projects.
+(`insider-dev.nginx`, port 3040) and is served at `insider.jpfarnsworth.com` for now (`AUTH_URL` matches). PM2 runs `next start`
+on the production build, so after changing code run `npm run build` and then `pm2 restart insider-signals-dev`; a restart alone
+serves the old build. Server components can't pass functions to client components (charts take format specs from
+`components/charts/formats.ts`); typecheck doesn't catch this, only loading the page does. Prod will be Amazon Lightsail; move the prod hostname there when it exists. Ports 3000–3005, 3010, 3020, 3021, 3033 belong to other projects.

@@ -34,9 +34,14 @@ export function drizzleJobStore(db: Db): JobStore {
 /**
  * Records a job's run in job_runs (spec §8): started, then success or failed
  * with the error. Failures are rethrown so the process exits non-zero.
- * Notification on failure hooks in here in milestone 8.
+ * `onFailure` lets the caller send a notification; it must not throw.
  */
-export async function runJob(store: JobStore, jobName: string, job: () => Promise<JobResult>): Promise<JobResult> {
+export async function runJob(
+  store: JobStore,
+  jobName: string,
+  job: () => Promise<JobResult>,
+  onFailure?: (jobName: string, error: string) => Promise<void>,
+): Promise<JobResult> {
   const id = await store.start(jobName);
   log('job started', { job: jobName, runId: id });
   try {
@@ -53,6 +58,7 @@ export async function runJob(store: JobStore, jobName: string, job: () => Promis
     const error = err instanceof Error ? err.message : String(err);
     await store.finish(id, { status: 'failed', itemsProcessed: 0, error: error.slice(0, 2000), meta: {} });
     log('job failed', { job: jobName, runId: id, error }, 'error');
+    await onFailure?.(jobName, error).catch(() => {});
     throw err;
   }
 }

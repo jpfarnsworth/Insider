@@ -10,6 +10,8 @@ import { scoreBaselineJob } from './jobs/score-baseline';
 import { refreshPricesJob } from './jobs/refresh-prices';
 import { computeOutcomesJob } from './jobs/compute-outcomes';
 import { scoreAgentJob } from './jobs/score-agent';
+import { alertSignalsJob } from './jobs/alert-signals';
+import { notifyJobFailure } from '@/lib/notify/alerts';
 import { JOB_NAMES, type JobName } from './job-names';
 
 const DEFAULT_LOOKBACK_DAYS = 3;
@@ -69,12 +71,14 @@ async function main() {
     'score-agent': () => scoreAgentJob(db, { limit: limitFromArgs(args) }),
     'refresh-prices': () => refreshPricesJob(db),
     'compute-outcomes': () => computeOutcomesJob(db),
+    'alert-signals': () => alertSignalsJob(db),
   };
 
   const store = drizzleJobStore(db);
+  const onFailure = (job: string, error: string) => notifyJobFailure(db, job, error);
   const ingesting = name === 'ingest-daily-index' || name === 'backfill';
   try {
-    await runJob(store, name, jobs[name as JobName]);
+    await runJob(store, name, jobs[name as JobName], onFailure);
   } catch (err) {
     // An ingest that failed partway still stored what it got, so the pipeline runs on that.
     if (!ingesting) throw err;
@@ -84,13 +88,18 @@ async function main() {
   // Detection follows every ingest, then prices, scoring and outcomes (spec §8). Each step
   // is recorded on its own, and one failing (e.g. Alpaca is down) doesn't skip the rest.
   if (ingesting) {
-    for (const next of ['detect-clusters', 'refresh-prices', 'score-baseline', 'score-agent', 'compute-outcomes'] as const) {
+    for (const next of ['detect-clusters', 'refresh-prices', 'score-baseline', 'score-agent', 'compute-outcomes', 'alert-signals'] as const) {
       try {
-        await runJob(store, next, jobs[next]);
+        await runJob(store, next, jobs[next], onFailure);
       } catch {
         process.exitCode = 1;
       }
     }
+  } else if (name === 'score-agent') {
+    // The agent's score is what lifts many signals over the alert threshold.
+    await runJob(store, 'alert-signals', jobs['alert-signals'], onFailure).catch(() => {
+      process.exitCode = 1;
+    });
   }
 }
 

@@ -20,6 +20,7 @@ import { loadPipelineHealth, loadSignalFacts } from '@/lib/analytics/load';
 import { histogram, MIN_N, rollingHitRate, SCORE_BANDS, summarize } from '@/lib/analytics/stats';
 import { requireUser } from '@/lib/auth/require-user';
 import { COSTS_KEY, costsSchema } from '@/lib/market/costs';
+import { DISPLAY_KEY, displaySchema } from '@/lib/display';
 import { formatPct, formatRate } from '@/lib/format';
 import { getSetting } from '@/lib/settings';
 import { BarChart } from '@/components/charts/bar-chart';
@@ -55,7 +56,8 @@ const GATE_LABEL = { pass: '✓ Pass', fail: '✕ Fail', insufficient: '… Not 
 export default async function PerformancePage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   await requireUser();
   const q = await searchParams;
-  const bench: Bench = q.bench === 'IWM' ? 'IWM' : 'SPY';
+  const display = await getSetting(db, DISPLAY_KEY, displaySchema);
+  const bench: Bench = q.bench === 'IWM' || q.bench === 'SPY' ? q.bench : display.defaultBenchmark;
   const net = q.net !== '0';
   const scope = q.scope === 'all' ? 'all' : 'post';
   const horizon = HORIZONS.find((h) => String(h) === q.h) ?? GATE_HORIZON;

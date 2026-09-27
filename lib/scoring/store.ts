@@ -4,7 +4,7 @@ import { clusterTransactions, filingOwners, filings, issuers, priceBars, signals
 import { etDate } from '@/lib/market/asof';
 import { toAlpacaSymbol } from '@/lib/market/store';
 import { loadClusterRule } from '@/lib/clusters/store';
-import { getSetting } from '@/lib/settings';
+import { getRevision, getSetting } from '@/lib/settings';
 import {
   BASELINE_VERSION,
   BASELINE_WEIGHTS_KEY,
@@ -44,7 +44,11 @@ async function drawdownFrom52wHigh(db: Db, ticker: string | null, signalAt: Date
  * filings accepted by then count, so scoring a past signal later can't peek ahead.
  */
 export async function scoreBaseline(db: Db, opts: { force?: boolean } = {}): Promise<{ scored: number }> {
-  const [rule, weights] = await Promise.all([loadClusterRule(db), getSetting(db, BASELINE_WEIGHTS_KEY, baselineWeightsSchema)]);
+  const [rule, weights, revision] = await Promise.all([
+    loadClusterRule(db),
+    getSetting(db, BASELINE_WEIGHTS_KEY, baselineWeightsSchema),
+    getRevision(db, BASELINE_WEIGHTS_KEY),
+  ]);
 
   const todo = await db
     .select({
@@ -135,7 +139,7 @@ export async function scoreBaseline(db: Db, opts: { force?: boolean } = {}): Pro
       );
       await db
         .update(signals)
-        .set({ baselineScore: String(result.score), baselineVersion: result.version, baselineBreakdown: result })
+        .set({ baselineScore: String(result.score), baselineVersion: result.version, baselineRevision: revision, baselineBreakdown: result })
         .where(eq(signals.id, s.id));
       scored++;
     }
