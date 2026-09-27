@@ -1,8 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_COSTS } from '@/lib/market/costs';
 import type { SignalFact, ViewOptions } from './facts';
 import { fact } from './fixtures';
 import { PREREG, blockBootstrap, evaluatePrereg, interimPrereg, offeringGap, quantile, rankCorrelationDifference, runPrereg, topTierMean, type PreregRow } from './prereg';
+
+// The registered bootstrap is 2000 resamples of a few hundred signals per test: slow on a busy Pi.
+vi.setConfig({ testTimeout: 30_000 });
 
 const view: ViewOptions = { bench: 'SPY', net: false, scope: 'post', costs: DEFAULT_COSTS };
 const WEEK = 7 * 86_400_000;

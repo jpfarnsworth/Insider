@@ -43,5 +43,20 @@ Prompt v1 gives bunched scores (quartiles 65/75/82, 22 distinct values, 69% at 7
 - **If it fails:** revise the wording (again judged by distribution only), at most 3 rounds in total. If it still fails, holdout signals use v1 and this section says so.
 - **Frozen:** whichever version is adopted, its file is never edited afterwards (a change is a new version). Every holdout signal is scored with it and only it. It is frozen before any holdout return is revealed.
 
+## Prompt v2 round log
+Each round scored the same 100 design-set signals (every 5th of 526, by signal date). Nothing was stored and no returns were read.
+
+| Round | Wording | Distinct | Quartiles | IQR | Share >= 70 | Valid | Result |
+|---|---|---|---|---|---|---|---|
+| v1 (reference) | ordinary = 50, "reserve above 80" | 22 | 65 / 75 / 82 | 17 | 69% | 100% | (the problem) |
+| 2026-09-27, round 1 | "use the whole scale", anchors, avoid round numbers | 19 | 68 / 73 / 78 | 10 | 69% | 100% | Not adopted |
+| 2026-09-27, round 2 | percentile-rank framing with five described bands | 17 | 68 / 78 / 82 | 14 | 73% | 100% | Not adopted |
+
+**Status (2026-09-27): v2 is not adopted, and holdout signals keep using v1.** Two of the three allowed rounds are used. A third round may still be run later; the holdout stays hidden, so this costs nothing in evidence. If a round passes, v2 is frozen and every holdout signal is re-scored with it (v1 evaluations are kept, never overwritten), so the holdout never mixes versions. If round 3 also fails, v1 stays for good.
+
+Two things noted while deciding, neither of which changes the registered criteria:
+- The model scores nearly every cluster as good whatever the framing, so the spread criteria (share at 70 or above, IQR) may be unreachable by wording alone. Rank tests are unaffected by the scale of the scores; what hurts them is ties (few distinct values). The registered criteria stay as written; relaxing them would be a deviation recorded here, with its reason.
+- v1 already shows the larger rank-correlation edge on the design set (agent minus baseline +0.110, 90% interval +0.016 to +0.205, 473 signals; descriptive, not evidence). Adopting v2 would make H2 test a scorer with no track record, so a v2 that passes on distribution should still be judged only by the registered process.
+
 ## Deviations
 Any departure from this document is recorded here, dated, with the reason, and in the work log. Results of these tests are reported as registered, including inconclusive ones.

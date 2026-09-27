@@ -21,7 +21,8 @@ import { recentEightKs, submissionsUrl, type EightKList } from './eightk';
 import { evaluateBundle, type EvaluationResult } from './evaluate';
 import { stopReason, type StopReason, type Usage } from './limits';
 import { AGENT_LIMITS_KEY, AGENT_MODEL, agentLimitsSchema, type AgentLimits } from './models';
-import { PROMPT_VERSION } from './prompts/v1';
+import { promptFor } from './prompts';
+import { loadHoldoutStart } from '@/lib/research/holdout';
 import type { LlmProvider } from './provider';
 import { log } from '@/lib/log';
 
@@ -190,13 +191,13 @@ async function fetchEightKs(edgar: EdgarClient | null, cik: string, signalAt: Da
 }
 
 /** Stores an evaluation as a NEW row (spec §5.2: never overwrite) and points the signal at it when it succeeded. */
-export async function saveEvaluation(db: Db, signalId: string, model: string, bundle: AgentBundle, r: EvaluationResult): Promise<string> {
+export async function saveEvaluation(db: Db, signalId: string, model: string, bundle: AgentBundle, r: EvaluationResult, promptVersion: string): Promise<string> {
   const [row] = await db
     .insert(agentEvaluations)
     .values({
       signalId,
       model,
-      promptVersion: PROMPT_VERSION,
+      promptVersion,
       inputBundle: bundle,
       output: r.status === 'ok' ? r.output : { raw: r.raw },
       score: r.status === 'ok' ? r.output.score : null,
@@ -216,8 +217,10 @@ export async function saveEvaluation(db: Db, signalId: string, model: string, bu
 export async function evaluateSignal(db: Db, provider: LlmProvider, edgar: EdgarClient | null, signalId: string) {
   const bundle = await loadBundle(db, edgar, signalId);
   if (!bundle) return null;
-  const result = await evaluateBundle(provider, bundle);
-  await saveEvaluation(db, signalId, provider.model, bundle, result);
+  const [{ signalAt }] = await db.select({ signalAt: signals.signalAt }).from(signals).where(eq(signals.id, signalId)).limit(1);
+  const prompt = promptFor(signalAt, await loadHoldoutStart(db));
+  const result = await evaluateBundle(provider, bundle, prompt);
+  await saveEvaluation(db, signalId, provider.model, bundle, result, prompt.version);
   return result;
 }
 

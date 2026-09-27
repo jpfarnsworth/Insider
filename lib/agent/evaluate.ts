@@ -1,4 +1,4 @@
-import { SYSTEM_PROMPT, userPrompt } from './prompts/v1';
+import { PROMPTS, type PromptSpec } from './prompts';
 import { LlmError, type LlmProvider } from './provider';
 import { parseAgentOutput, type AgentOutput } from './schema';
 
@@ -17,16 +17,16 @@ export type EvaluationResult =
  * validation error fed back; after that, or on any provider error, the result is
  * `agent_failed`. It never throws: a failed evaluation must not block the pipeline.
  */
-export async function evaluateBundle(provider: LlmProvider, bundle: unknown): Promise<EvaluationResult> {
+export async function evaluateBundle(provider: LlmProvider, bundle: unknown, prompt: PromptSpec = PROMPTS.v1): Promise<EvaluationResult> {
   const usage: Usage = { tokensIn: 0, tokensOut: 0, latencyMs: 0 };
-  const user = userPrompt(bundle);
+  const user = prompt.user(bundle);
   let raw: string | null = null;
   let error = '';
 
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const res = await provider.generate({
-        system: SYSTEM_PROMPT,
+        system: prompt.system,
         user:
           attempt === 0
             ? user

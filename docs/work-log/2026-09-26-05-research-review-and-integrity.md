@@ -15,8 +15,8 @@ Outside feedback on the results prompted checking the measurement itself. That f
 - **Missing-volume check** on `/system`; `compute-outcomes` records the count.
 - Gemini checks: the request has no `tools` (no Search grounding); documented cutoff January 2025 matches the code.
 
-## Agent batch
-- `score-agent --limit=200` started in the background; about $0.0066 per signal (about 3.4k tokens in, 2.2k out, about 10 s each). 139 evaluations stored at the time of writing, none failed; still running.
+## Agent batch (final)
+- Two runs (`--limit=200`, then `--limit=400`) scored every signal: 601 evaluations with prompt v1, zero failed (526 post-cutoff, 66 pre-cutoff, 9 later superseded). About 1.8M tokens in and 1.3M out, roughly $3.87 at the configured prices ($0.0064 a signal), about 11 s each. The two v2 dry runs (see entry 09) cost about $1.25 more and stored nothing.
 
 ## Follow-ups
 - Per-model training cutoff (currently one constant) and a buffer just after the cutoff.

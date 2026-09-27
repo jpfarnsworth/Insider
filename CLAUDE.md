@@ -33,6 +33,7 @@ npm run worker -- score-agent [--limit=N]   # Gemini evaluations under the daily
 npm run worker -- compute-outcomes   # forward returns for matured horizons
 npm run worker -- alert-signals   # Telegram alerts for new signals at/above the score threshold (no-op unless notifications are on)
 npm run fixtures:fetch -- YYYYMMDD ...   # re-download real Form 4 fixtures (see tests/fixtures)
+npm run prompt:distribution -- [v1|v2] [--n=100]   # dry-run score distribution for the prompt adoption check; stores nothing, reads no returns
 ```
 
 ## Architecture
@@ -218,14 +219,21 @@ There is no Row Level Security, so access control is entirely in code:
 - **Gates 2 and 3 use signals scored by both scorers** (`lib/analytics/gates.ts`). The agent works newest first, so comparing an
   agent tier over the scored months with a baseline tier over all months compared periods, not scorers (it briefly showed
   "Agent wins"; on the same signals the baseline tier was ahead). Identical to the spec once every signal is scored.
-- **Gate 3 rule** (`lib/analytics/head-to-head.ts`, `gates.ts`; chosen 2026-09-26 after the design set had been seen, so the OFFICIAL verdict
-  uses only holdout-window signals, revealed in Settings; until then the design-set result is shown as "NOT evidence"). Both tiers are the
-  top third by each scorer's own rank on the same signals (agent scores are bunched: a fixed 70 selects ~two thirds), with tied boundary
-  scores sharing weight so each tier is exactly n/3. The difference in tier means is bootstrapped by resampling whole calendar weeks of
-  the shared set and rebuilding both tiers each time (seeded, so it is reproducible). The agent is kept only if the 95% interval is
-  above zero; anything else drops it (the burden of proof is on the agent). Needs 20+ signals per tier (60+ shared with complete
-  outcomes). Spearman correlation with the 30-day return is reported as a supporting line and never decides. Gate 2 still uses the
-  spec's union tier, on signals scored by both.
+- **Pre-registered holdout tests** (`docs/preregistration.md`, `lib/analytics/prereg.ts`; registered 2026-09-27 before any holdout return
+  existed; the `PREREG` constants ARE the registration, so changing one is a new dated registration, never a tweak). All use holdout-window
+  signals only (signal day on/after the holdout start), the 30-day net excess vs SPY, a weekly-block bootstrap (whole calendar weeks
+  resampled), one-sided 5%, each run once at its fixed size. **H1 = gate 2**: top tier (top third by baseline OR by agent, rank-based)
+  has mean > 0, at 90+ signals scored by both. **H2 = gate 3**: agent Spearman minus baseline Spearman > 0, one-sided, the earliest
+  300 shared signals. **H3**: offering-like (`single_day_single_price`) clusters underperform, at 30+ tagged signals. Expect
+  inconclusive results: H2 is registered as underpowered at n=300 (design-set interval about +/-0.13).
+- **Gate 3 default is "not promoted"**: the agent keeps running as a shadow scorer no decision uses (about $0.16 a month), Phase 2
+  proceeds on the baseline, and gate 3 resolves (status pass, so it never blocks) with "Not promoted (default)" until H2 says
+  "Promote". The top-third tier comparison (`head-to-head.ts`) is descriptive only: it needs a ~5-point gap at n=300.
+  Design-set numbers beside the gates are labelled NOT evidence: the rules were chosen after seeing that data.
+- **Prompt versions** (`lib/agent/prompts/`, `promptFor`): design-set signals always use v1; holdout-window signals use v2 and only v2
+  (never a mix) once `V2_ADOPTED` is true. **Status 2026-09-27: v2 failed the distribution check in rounds 1 and 2 (see the pre-registration's round log), so `V2_ADOPTED` is false and holdout signals use v1.** v2 is adopted by score distribution alone, never by returns
+  (`npm run prompt:distribution -- v2` stores nothing and reads no returns; criteria in the pre-registration). Never edit a released
+  prompt file; add a new version. Design-set v1 scores are kept for reference.
 - Gemini: the request has no `tools` (no Search grounding); the model's documented cutoff is January 2025 (`lib/agent/models.ts`).
 
 ## Work log
