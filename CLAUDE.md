@@ -147,8 +147,7 @@ There is no Row Level Security, so access control is entirely in code:
   clump on round numbers, so rank deciles would split ties arbitrarily). Top tiers: agent >= 70, baseline top third (ties at
   the boundary are included). Correlation is Spearman.
 - Evaluation gates always use post-cutoff signals, net of costs, at 30 days, whatever the page toggles say. Gate 2 uses the
-  union tier (agent >= 70 or baseline top third). Gate 3 passes either way once both tiers have 20+ signals ("agent wins" or
-  "drop the agent"). Gate 4 is "insufficient" until the pipeline has 30 days of history, then needs parse errors < 1% and
+  union tier (agent >= 70 or baseline top third). Gate 3 is the pre-committed head-to-head below. Gate 4 is "insufficient" until the pipeline has 30 days of history, then needs parse errors < 1% and
   successful-ingest weekdays > 95%.
 - Prices are stored only for tickers that have a signal. So company charts and insider track records have no returns for
   other tickers; the UI says so rather than showing made-up numbers.
@@ -219,6 +218,14 @@ There is no Row Level Security, so access control is entirely in code:
 - **Gates 2 and 3 use signals scored by both scorers** (`lib/analytics/gates.ts`). The agent works newest first, so comparing an
   agent tier over the scored months with a baseline tier over all months compared periods, not scorers (it briefly showed
   "Agent wins"; on the same signals the baseline tier was ahead). Identical to the spec once every signal is scored.
+- **Gate 3 rule** (`lib/analytics/head-to-head.ts`, `gates.ts`; chosen 2026-09-26 after the design set had been seen, so the OFFICIAL verdict
+  uses only holdout-window signals, revealed in Settings; until then the design-set result is shown as "NOT evidence"). Both tiers are the
+  top third by each scorer's own rank on the same signals (agent scores are bunched: a fixed 70 selects ~two thirds), with tied boundary
+  scores sharing weight so each tier is exactly n/3. The difference in tier means is bootstrapped by resampling whole calendar weeks of
+  the shared set and rebuilding both tiers each time (seeded, so it is reproducible). The agent is kept only if the 95% interval is
+  above zero; anything else drops it (the burden of proof is on the agent). Needs 20+ signals per tier (60+ shared with complete
+  outcomes). Spearman correlation with the 30-day return is reported as a supporting line and never decides. Gate 2 still uses the
+  spec's union tier, on signals scored by both.
 - Gemini: the request has no `tools` (no Search grounding); the model's documented cutoff is January 2025 (`lib/agent/models.ts`).
 
 ## Work log

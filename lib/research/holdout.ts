@@ -23,6 +23,11 @@ const chicagoDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago
 
 export const isHeldOut = (signalAt: number, from: string | null): boolean => from !== null && chicagoDay.format(new Date(signalAt)) >= from;
 
+/** The configured start date, revealed or not (gate 3's official window is defined by it). */
+export async function loadHoldoutStart(db: Db): Promise<string> {
+  return (await getSetting(db, HOLDOUT_KEY, holdoutSchema)).from;
+}
+
 export async function loadHoldoutFrom(db: Db): Promise<string | null> {
   return heldOutFrom(await getSetting(db, HOLDOUT_KEY, holdoutSchema));
 }

@@ -36,8 +36,10 @@ export interface SignalFact {
   status: 'active' | 'amended' | 'data_ended' | 'superseded';
   /** Descriptive tags (see lib/clusters/tags.ts), e.g. 'single_day_single_price'. */
   tags: string[];
-  /** In the holdout window: its outcomes are withheld (empty) until the freeze is lifted. */
+  /** In the holdout window and still frozen: its outcomes are withheld (empty). */
   holdout: boolean;
+  /** On or after the holdout start date, whether or not it has been revealed. Gate 3's official verdict uses only these. */
+  holdoutWindow: boolean;
   /** horizon (trading days) -> benchmark -> outcome. */
   outcomes: Record<number, Partial<Record<Bench, OutcomeFact>>>;
 }

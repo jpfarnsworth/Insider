@@ -21,7 +21,7 @@ import { histogram, MIN_N, rollingHitRate, SCORE_BANDS, summarize } from '@/lib/
 import { requireUser } from '@/lib/auth/require-user';
 import { COSTS_KEY, costsSchema } from '@/lib/market/costs';
 import { loadPortfolio } from '@/lib/analytics/portfolio-load';
-import { loadHoldoutFrom } from '@/lib/research/holdout';
+import { loadHoldoutFrom, loadHoldoutStart } from '@/lib/research/holdout';
 import { OFFERING_LIKE } from '@/lib/clusters/tags';
 import { DISPLAY_KEY, displaySchema } from '@/lib/display';
 import { formatPct, formatRate } from '@/lib/format';
@@ -74,7 +74,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
 
   // The gates always use the spec's basis (post-cutoff, net of costs) whatever the toggles say.
   const gateView: ViewOptions = { bench, net: true, scope: 'post', costs };
-  const gates = evaluateGates(all.filter((f) => inScope(f, gateView)), gateView, health);
+  const gates = evaluateGates(all.filter((f) => inScope(f, gateView)), gateView, health, { holdoutFrom: await loadHoldoutStart(db) });
 
   const href = (over: Record<string, string>) => {
     const p = new URLSearchParams({ bench, net: net ? '1' : '0', scope, h: String(horizon), off: excludeOffering ? '1' : '0', ...over });

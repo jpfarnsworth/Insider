@@ -2,7 +2,8 @@ import { eq, ne, sql } from 'drizzle-orm';
 import type { Db } from '@/lib/db';
 import { agentEvaluations, clusters, issuers, signalOutcomes, signals } from '@/db/schema';
 import { isPostCutoff } from '@/lib/agent/models';
-import { isHeldOut, loadHoldoutFrom } from '@/lib/research/holdout';
+import { HOLDOUT_KEY, heldOutFrom, holdoutSchema, isHeldOut } from '@/lib/research/holdout';
+import { getSetting } from '@/lib/settings';
 import type { Bench, OutcomeFact, RoleMix, SignalFact } from './facts';
 import type { PipelineHealth } from './gates';
 
@@ -13,8 +14,8 @@ const num = (v: string | null): number | null => (v === null ? null : Number(v))
  * Signals in the holdout window (lib/research/holdout.ts) come back with no outcomes.
  */
 export async function loadSignalFacts(db: Db): Promise<SignalFact[]> {
-  const [heldFrom, base, outcomes, roles] = await Promise.all([
-    loadHoldoutFrom(db),
+  const [holdoutSettings, base, outcomes, roles] = await Promise.all([
+    getSetting(db, HOLDOUT_KEY, holdoutSchema),
     db
       .select({
         id: signals.id,
@@ -52,6 +53,7 @@ export async function loadSignalFacts(db: Db): Promise<SignalFact[]> {
       group by ct.cluster_id`),
   ]);
 
+  const heldFrom = heldOutFrom(holdoutSettings);
   const roleMix = new Map<string, RoleMix>();
   for (const r of roles.rows) roleMix.set(r.cluster_id, r.ceo_cfo ? 'ceo_cfo' : r.officer ? 'other_officer' : r.director ? 'director' : 'other');
 
@@ -88,6 +90,7 @@ export async function loadSignalFacts(db: Db): Promise<SignalFact[]> {
     status: b.status,
     tags: b.tags,
     holdout: isHeldOut(b.signalAt.getTime(), heldFrom),
+    holdoutWindow: isHeldOut(b.signalAt.getTime(), holdoutSettings.from),
     // Held-out signals carry no returns, so no aggregate, tier, gate or export can see them.
     outcomes: isHeldOut(b.signalAt.getTime(), heldFrom) ? {} : (bySignal.get(b.id) ?? {}),
   }));

@@ -32,6 +32,7 @@ export function fact(o: Partial<SignalFact> & { excess?: number; iwmExcess?: num
     status: 'active',
     tags: [],
     holdout: false,
+    holdoutWindow: false,
     outcomes: { 30: { SPY: out({ excessPct: excess, status: outcomeStatus }), IWM: out({ excessPct: iwmExcess, status: outcomeStatus }) } },
     ...rest,
   };

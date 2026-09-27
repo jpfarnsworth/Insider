@@ -1,6 +1,9 @@
 import type { SignalFact, ViewOptions } from './facts';
-import { excessValues, tiersFor } from './facts';
+import { headToHead, GATE3_MIN_TIER, type HeadToHead, type Paired } from './head-to-head';
+import { excessAt, excessValues, tiersFor } from './facts';
 import { MIN_N, summarize, type Summary } from './stats';
+
+const WEEK_MS = 7 * 86_400_000;
 
 // Spec §11: paper trading is built only when ALL of these pass, on post-model-cutoff signals,
 // net of costs. "Insufficient" means the data has not accumulated yet, which is not a failure.
@@ -37,11 +40,60 @@ function tierLine(label: string, s: Summary): string {
   return s.sufficient ? `${label}: n=${s.n}, mean ${signedPct(s.mean)}` : `${label}: n=${s.n} (needs ${MIN_N})`;
 }
 
+/** Signals scored by both scorers with a complete outcome at the gate horizon, ready for the head-to-head. */
+function pairedFor(facts: SignalFact[], view: ViewOptions): Paired[] {
+  return facts.flatMap((f) => {
+    const excess = excessAt(f, GATE_HORIZON, view);
+    return f.agentScore !== null && f.baselineScore !== null && excess !== null
+      ? [{ week: Math.floor(f.signalAt / WEEK_MS), agent: f.agentScore, baseline: f.baselineScore, excess }]
+      : [];
+  });
+}
+
+const signed = (x: number) => `${x >= 0 ? '+' : '−'}${Math.abs(x).toFixed(2)}`;
+const rho = (x: number) => (Number.isNaN(x) ? '—' : x.toFixed(2));
+
+function h2hLine(h: HeadToHead): string {
+  return (
+    `top third by each scorer on ${h.n} shared signals: agent ${signed(h.agentMean)}% vs baseline ${signed(h.baselineMean)}% ` +
+    `(difference ${signed(h.difference)}, 95% interval ${Number.isNaN(h.lo) ? '—' : `${signed(h.lo)} to ${signed(h.hi)}`}, weekly-block bootstrap). ` +
+    `Rank correlation with 30-day return, all shared signals: agent ${rho(h.spearmanAgent)}, baseline ${rho(h.spearmanBaseline)}.`
+  );
+}
+
+/**
+ * Gate 3. Tiers are the top third by each scorer's own rank on the shared signals; the difference in
+ * tier means is bootstrapped in weekly blocks with both tiers rebuilt each time; the agent is kept
+ * only if that difference is above zero with 95% confidence, otherwise it is dropped. This rule was
+ * chosen after the design set had been looked at, so the OFFICIAL verdict uses only signals from the
+ * holdout window (revealed in Settings). Until then the design-set result is shown as provisional.
+ */
+function gate3For(facts: SignalFact[], view: ViewOptions, holdoutFrom: string | null): Gate {
+  const title = "The agent's top tier beats the baseline's top tier (95% confidence), or the agent is dropped";
+  const official = headToHead(pairedFor(facts.filter((f) => f.holdoutWindow), view));
+  const interim = headToHead(pairedFor(facts.filter((f) => !f.holdoutWindow), view));
+  const windowCount = facts.filter((f) => f.holdoutWindow).length;
+  const interimText = interim.n >= 3 ? `Interim on the design set, NOT evidence: ${h2hLine(interim)}` : 'Interim: too few shared signals yet.';
+
+  if (official.verdict) {
+    return {
+      id: 3,
+      title,
+      status: 'pass', // decided by data either way
+      detail: `${official.verdict === 'keep_agent' ? 'Keep the agent' : 'Drop the agent'}: ${official.reason}. Holdout: ${h2hLine(official)}`,
+    };
+  }
+  const waiting = holdoutFrom
+    ? `Official verdict awaits the holdout (signals from ${holdoutFrom}; ${windowCount} so far, ${official.n} with complete outcomes shared by both scorers, need ${3 * GATE3_MIN_TIER}+). `
+    : `Official verdict needs ${3 * GATE3_MIN_TIER}+ holdout-window signals scored by both with complete outcomes (${official.n} so far). `;
+  return { id: 3, title, status: 'insufficient', detail: waiting + interimText };
+}
+
 /**
  * The four evaluation gates. `facts` must already be the post-cutoff signals; `view` should be net
  * of costs (the Performance page forces both for this panel).
  */
-export function evaluateGates(facts: SignalFact[], view: ViewOptions, health: PipelineHealth): Gate[] {
+export function evaluateGates(facts: SignalFact[], view: ViewOptions, health: PipelineHealth, opts: { holdoutFrom?: string | null } = {}): Gate[] {
   const complete = excessValues(facts, GATE_HORIZON, view).length;
   const gate1: Gate = {
     id: 1,
@@ -59,8 +111,6 @@ export function evaluateGates(facts: SignalFact[], view: ViewOptions, health: Pi
   const basis = pool.length === facts.length ? '' : ` [on ${pool.length} signals scored by both]`;
   const tiers = tiersFor(pool);
   const top = summarize(excessValues(pool.filter(tiers.isTop), GATE_HORIZON, view));
-  const agent = summarize(excessValues(pool.filter(tiers.isAgentTop), GATE_HORIZON, view));
-  const baseline = summarize(excessValues(pool.filter(tiers.isBaselineTop), GATE_HORIZON, view));
 
   const gate2: Gate = {
     id: 2,
@@ -69,17 +119,7 @@ export function evaluateGates(facts: SignalFact[], view: ViewOptions, health: Pi
     detail: tierLine('Agent >= 70 or baseline top third', top) + basis,
   };
 
-  const both = agent.sufficient && baseline.sufficient;
-  const gate3: Gate = {
-    id: 3,
-    title: "The agent's top tier outperforms the baseline's top tier, or the agent is dropped",
-    status: both ? 'pass' : 'insufficient',
-    detail: both
-      ? agent.mean > baseline.mean
-        ? `Agent wins: ${tierLine('agent', agent)} vs ${tierLine('baseline', baseline)}${basis}`
-        : `Baseline wins, so drop the agent: ${tierLine('agent', agent)} vs ${tierLine('baseline', baseline)}${basis}`
-      : `${tierLine('Agent tier', agent)}; ${tierLine('baseline tier', baseline)}${basis}`,
-  };
+  const gate3 = gate3For(facts, view, opts.holdoutFrom ?? null);
 
   const parseRate = health.filings ? health.parseFailures / health.filings : 0;
   const uptime = health.weekdays ? health.weekdaysWithSuccessfulIngest / health.weekdays : 0;

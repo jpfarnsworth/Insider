@@ -55,36 +55,79 @@ describe('gate 2: top tier has positive net excess', () => {
   });
 });
 
-describe('gate 3: agent versus baseline', () => {
-  it('is insufficient until both tiers have enough signals', () => {
-    expect(gate([...many(25, { baseline: 90 }), ...many(5, { baseline: 40, agent: 80 })], healthy, 3).status).toBe('insufficient');
+const WEEK = 7 * 86_400_000;
+
+/**
+ * n signals spread over `weeks` weeks, all in the holdout window. The agent's score follows the excess
+ * return with strength `edge`; the baseline's is unrelated noise (or follows it with `baselineEdge`).
+ */
+function holdoutSet(n: number, weeks: number, edge: number, baselineEdge = 0, o: { frozen?: boolean } = {}): SignalFact[] {
+  let a = 12345;
+  const rand = () => ((a = (a * 1664525 + 1013904223) % 4294967296) / 4294967296);
+  return Array.from({ length: n }, (_, i) => {
+    const excess = (rand() - 0.5) * 20;
+    return fact({
+      signalAt: Date.UTC(2026, 9, 1) + (i % weeks) * WEEK,
+      excess: excess + 0.3, // gross; the view is net, which subtracts the cost
+      agentScore: Math.round(50 + edge * excess + (rand() - 0.5) * 20),
+      baselineScore: 50 + baselineEdge * excess + (rand() - 0.5) * 60,
+      holdoutWindow: true,
+      holdout: o.frozen ?? false,
+      ...(o.frozen ? { outcomes: {} } : {}),
+    });
+  });
+}
+
+describe('gate 3: agent versus baseline (top third by each rank, weekly-block bootstrap)', () => {
+  it('is insufficient, and says the interim is not evidence, until the holdout has enough signals', () => {
+    const design = [...many(30, { baseline: 90, agent: 60, excess: 3 }), ...many(30, { baseline: 40, agent: 80, excess: 5 })];
+    const g = evaluateGates(design, view, healthy, { holdoutFrom: '2026-10-01' })[2];
+    expect(g.status).toBe('insufficient');
+    expect(g.detail).toContain('awaits the holdout');
+    expect(g.detail).toContain('NOT evidence');
   });
 
-  it('passes when the agent tier beats the baseline tier', () => {
-    const facts = [...many(25, { baseline: 90, agent: 60, excess: 2 }), ...many(25, { baseline: 40, agent: 80, excess: 6 }), ...many(20, { baseline: 40, agent: 60 })];
-    const g = gate(facts, healthy, 3);
-    expect(g.status).toBe('pass');
-    expect(g.detail).toMatch(/^Agent wins/);
+  it('names the holdout start date while waiting', () => {
+    const g = evaluateGates(many(60, { baseline: 50, agent: 60 }), view, healthy, { holdoutFrom: '2026-10-01' })[2];
+    expect(g.detail).toContain('signals from 2026-10-01');
   });
 
-  it('also passes, deciding to drop the agent, when the baseline tier does better', () => {
-    const facts = [...many(25, { baseline: 90, agent: 60, excess: 7 }), ...many(25, { baseline: 40, agent: 80, excess: 1 }), ...many(20, { baseline: 40, agent: 60 })];
-    const g = gate(facts, healthy, 3);
+  it('stays insufficient while the holdout is frozen (its outcomes are withheld)', () => {
+    const g = evaluateGates(holdoutSet(120, 15, 2, 0, { frozen: true }), view, healthy, { holdoutFrom: '2026-10-01' })[2];
+    expect(g.status).toBe('insufficient');
+    expect(g.detail).toContain('120 so far, 0 with complete outcomes');
+  });
+
+  it('keeps the agent when its top third beats the baseline top third with 95% confidence', () => {
+    const g = gate(holdoutSet(240, 30, 3), healthy, 3);
+    expect(g.status).toBe('pass'); // decided by the data
+    expect(g.detail).toMatch(/^Keep the agent/);
+    expect(g.detail).toContain('weekly-block bootstrap');
+    expect(g.detail).toContain('Rank correlation');
+  });
+
+  it('drops the agent when there is no distinguishable difference: the burden of proof is on it', () => {
+    const g = gate(holdoutSet(240, 30, 0), healthy, 3);
     expect(g.status).toBe('pass');
-    expect(g.detail).toMatch(/^Baseline wins, so drop the agent/);
+    expect(g.detail).toMatch(/^Drop the agent/);
+  });
+
+  it('drops the agent when the baseline is clearly ahead', () => {
+    const g = gate(holdoutSet(240, 30, 0, 3), healthy, 3);
+    expect(g.detail).toMatch(/^Drop the agent: the baseline tier is ahead/);
   });
 });
 
-describe('gates 2 and 3 compare like with like', () => {
-  it('ignores signals the agent has not scored, so a partial batch cannot skew the tiers', () => {
-    // 30 unscored baseline-strong signals that did badly must not drag the baseline tier below the agent's.
+describe('gate 2 compares like with like', () => {
+  it('ignores signals the agent has not scored, so a partial batch cannot skew the tier', () => {
     const scoredBaseline = many(25, { baseline: 90, agent: 60, excess: 5 });
     const scoredAgent = many(25, { baseline: 40, agent: 80, excess: 3 });
     const filler = many(20, { baseline: 40, agent: 55, excess: 1 });
+    // 30 unscored baseline-strong signals that did badly must not drag the tier down.
     const unscored = many(30, { baseline: 95, agent: null, excess: -10 });
-    const g = gate([...scoredBaseline, ...scoredAgent, ...filler, ...unscored], healthy, 3);
-    expect(g.detail).toMatch(/^Baseline wins/); // baseline +5 vs agent +3 on the scored set
+    const g = gate([...scoredBaseline, ...scoredAgent, ...filler, ...unscored], healthy, 2);
     expect(g.detail).toContain('[on 70 signals scored by both]');
+    expect(g.status).toBe('pass');
   });
 
   it('falls back to every signal while the agent has scored none', () => {
@@ -125,7 +168,7 @@ describe('gate 4: pipeline health', () => {
 
 describe('allGatesPass', () => {
   it('needs every gate to pass', () => {
-    const facts = [...many(30, { baseline: 90, agent: 60, excess: 4 }), ...many(30, { baseline: 40, agent: 80, excess: 6 }), ...many(20, { baseline: 40, agent: 60, excess: 1 })];
+    const facts = [...many(30, { baseline: 90, agent: 60, excess: 4 }), ...many(30, { baseline: 40, agent: 80, excess: 6 }), ...many(20, { baseline: 40, agent: 60, excess: 1 }), ...holdoutSet(240, 30, 3)];
     const gates = evaluateGates(facts, view, healthy);
     expect(gates.map((x) => x.status)).toEqual(['pass', 'pass', 'pass', 'pass']);
     expect(allGatesPass(gates)).toBe(true);

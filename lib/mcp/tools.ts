@@ -11,6 +11,7 @@ import { COSTS_KEY, costsSchema } from '@/lib/market/costs';
 import { OFFERING_LIKE } from '@/lib/clusters/tags';
 import { getSetting } from '@/lib/settings';
 import { loadPortfolio } from '@/lib/analytics/portfolio-load';
+import { loadHoldoutStart } from '@/lib/research/holdout';
 import { search } from '@/lib/search';
 import { listEntries, readEntry } from '@/lib/worklog';
 import { applyFilters, parseFilters } from '@/lib/signals/filters';
@@ -142,7 +143,7 @@ export function createMcpServer(): McpServer {
       const view: ViewOptions = { bench, net: a.net ?? true, scope: a.scope ?? 'post', costs };
       const facts = all.filter((f) => inScope(f, view) && !(a.exclude_offering_like && f.tags.includes(OFFERING_LIKE)));
       const gateView: ViewOptions = { bench, net: true, scope: 'post', costs };
-      const gates = evaluateGates(all.filter((f) => inScope(f, gateView)), gateView, health);
+      const gates = evaluateGates(all.filter((f) => inScope(f, gateView)), gateView, health, { holdoutFrom: await loadHoldoutStart(db) });
       const portfolio = await loadPortfolio(db, { signalIds: facts.filter((f) => !f.holdout).map((f) => f.id), benchmark: bench, holdDays: a.hold_days ?? GATE_HORIZON, net: view.net, costs });
       const kpis = computeKpis(facts, view, Date.now(), active.length);
       const summary = (h: number) => {
