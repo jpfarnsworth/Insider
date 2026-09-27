@@ -115,5 +115,9 @@ export const transactions = pgTable(
     index('transactions_issuer_date_idx').on(t.issuerCik, t.transactionDate),
     index('transactions_insider_idx').on(t.insiderCik),
     index('transactions_filing_id_idx').on(t.filingId),
+    // Supports the dashboard's "recent buys" panel: open-market purchases, newest and largest first.
+    index('transactions_recent_buys_idx')
+      .on(t.transactionDate.desc(), t.value.desc())
+      .where(sql`${t.code} = 'P' and not ${t.isDerivative}`),
   ],
 );

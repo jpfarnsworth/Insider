@@ -4,13 +4,12 @@ import { db } from '@/lib/db';
 import { computeKpis } from '@/lib/analytics/dashboard';
 import { inScope, summaryAt, excessAt, type Bench, type ViewOptions } from '@/lib/analytics/facts';
 import { evaluateGates, GATE_HORIZON } from '@/lib/analytics/gates';
-import { loadPipelineHealth, loadSignalFacts } from '@/lib/analytics/load';
 import { AGENT_MODEL } from '@/lib/agent/models';
 import { DISPLAY_KEY, displaySchema } from '@/lib/display';
 import { COSTS_KEY, costsSchema } from '@/lib/market/costs';
 import { OFFERING_LIKE } from '@/lib/clusters/tags';
 import { getSetting } from '@/lib/settings';
-import { loadPortfolio } from '@/lib/analytics/portfolio-load';
+import { getCachedPipelineHealth, getCachedPortfolio, getCachedSignalFacts } from '@/lib/analytics/cache';
 import { PREREG, evaluatePrereg, interimPrereg } from '@/lib/analytics/prereg';
 import { loadHoldoutStart } from '@/lib/research/holdout';
 import { search } from '@/lib/search';
@@ -134,8 +133,8 @@ export function createMcpServer(): McpServer {
     },
     async (a) => {
       const [all, health, costs, display, active] = await Promise.all([
-        loadSignalFacts(db),
-        loadPipelineHealth(db),
+        getCachedSignalFacts(),
+        getCachedPipelineHealth(),
         getSetting(db, COSTS_KEY, costsSchema),
         getSetting(db, DISPLAY_KEY, displaySchema),
         db.select({ id: clusters.id }).from(clusters).where(eq(clusters.status, 'active')),
@@ -145,7 +144,7 @@ export function createMcpServer(): McpServer {
       const facts = all.filter((f) => inScope(f, view) && !(a.exclude_offering_like && f.tags.includes(OFFERING_LIKE)));
       const gateView: ViewOptions = { bench, net: true, scope: 'post', costs };
       const gates = evaluateGates(all.filter((f) => inScope(f, gateView)), gateView, health, { holdoutFrom: await loadHoldoutStart(db) });
-      const portfolio = await loadPortfolio(db, { signalIds: facts.filter((f) => !f.holdout).map((f) => f.id), benchmark: bench, holdDays: a.hold_days ?? GATE_HORIZON, net: view.net, costs });
+      const portfolio = await getCachedPortfolio(facts.filter((f) => !f.holdout).map((f) => f.id), bench, a.hold_days ?? GATE_HORIZON, view.net, costs);
       const kpis = computeKpis(facts, view, Date.now(), active.length);
       const summary = (h: number) => {
         const s = summaryAt(facts, h, view);

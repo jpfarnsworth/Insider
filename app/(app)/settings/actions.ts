@@ -1,7 +1,7 @@
 'use server';
 
 import { spawn } from 'node:child_process';
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, updateTag } from 'next/cache';
 import type { z } from 'zod';
 import { db } from '@/lib/db';
 import { requireUser } from '@/lib/auth/require-user';
@@ -17,6 +17,7 @@ import { NOTIFICATIONS_KEY, notificationsSchema } from '@/lib/notify/settings';
 import { BASELINE_WEIGHTS_KEY, baselineWeightsSchema } from '@/lib/scoring/baseline';
 import { HOLDOUT_KEY, holdoutSchema } from '@/lib/research/holdout';
 import { saveSetting } from '@/lib/settings';
+import { ANALYTICS_TAG } from '@/lib/analytics/cache';
 import type { FormState } from './state';
 
 const num = (fd: FormData, name: string): number => {
@@ -30,8 +31,11 @@ async function save<S extends z.ZodType>(key: string, schema: S, input: unknown,
   const res = await saveSetting(db, key, schema, input);
   if (!res.ok) return { status: 'error', message: res.error };
   revalidatePath('/settings');
-  // Everything downstream reads these settings, so cached pages must not keep old numbers.
+  // Everything downstream reads these settings, so cached pages must not keep old numbers. This
+  // process (the web server) can revalidate the analytics cache directly; a worker CLI run cannot,
+  // and falls back to that cache's own short TTL (lib/analytics/cache.ts).
   revalidatePath('/', 'layout');
+  updateTag(ANALYTICS_TAG);
   return { status: 'ok', message: res.changed ? ok(res.version) : 'No changes to save.' };
 }
 

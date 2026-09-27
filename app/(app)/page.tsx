@@ -3,12 +3,11 @@ import { and, desc, eq, ne, sql } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { clusters, filings, filingOwners, insiders, issuers, jobRuns, signals, transactions } from '@/db/schema';
 import { agentUsage } from '@/lib/agent/store';
+import { getCachedBuildingClusters, getCachedSignalFacts } from '@/lib/analytics/cache';
 import { computeKpis, cumulativeByTier, HORIZON_LIST, meansByHorizon } from '@/lib/analytics/dashboard';
 import { inScope, type ViewOptions } from '@/lib/analytics/facts';
-import { loadSignalFacts } from '@/lib/analytics/load';
 import { MIN_N } from '@/lib/analytics/stats';
 import { requireUser } from '@/lib/auth/require-user';
-import { findBuildingClusters } from '@/lib/clusters/store';
 import { nowMs } from '@/lib/clock';
 import { chicagoToday } from '@/lib/edgar/dates';
 import { getFlags } from '@/lib/flags';
@@ -57,7 +56,7 @@ export default async function DashboardPage() {
   const today = chicagoToday();
 
   const [all, costs, flags, [activeRow], latestSignals, latest, buys, usage, [failedToday]] = await Promise.all([
-    loadSignalFacts(db),
+    getCachedSignalFacts(),
     getSetting(db, COSTS_KEY, costsSchema),
     getFlags(db),
     db.select({ n: sql<number>`count(*)::int` }).from(clusters).where(eq(clusters.status, 'active')),
@@ -110,7 +109,7 @@ export default async function DashboardPage() {
   const factById = new Map(all.map((f) => [f.id, f]));
   const [toDate, building] = await Promise.all([
     loadReturnsToDate(db, latestSignals),
-    flags.early_watch_clusters ? findBuildingClusters(db, today) : Promise.resolve([]),
+    flags.early_watch_clusters ? getCachedBuildingClusters(today) : Promise.resolve([]),
   ]);
   const runByJob = new Map(latest.map((r) => [r.jobName, r]));
 

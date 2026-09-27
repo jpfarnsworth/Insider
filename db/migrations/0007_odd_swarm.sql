@@ -1,0 +1,1 @@
+CREATE INDEX "transactions_recent_buys_idx" ON "transactions" USING btree ("transaction_date" DESC NULLS LAST,"value" DESC NULLS LAST) WHERE "transactions"."code" = 'P' and not "transactions"."is_derivative";

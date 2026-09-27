@@ -17,11 +17,10 @@ import {
 } from '@/lib/analytics/facts';
 import { allGatesPass, evaluateGates, GATE_HORIZON } from '@/lib/analytics/gates';
 import { PREREG, evaluatePrereg, interimPrereg } from '@/lib/analytics/prereg';
-import { loadPipelineHealth, loadSignalFacts } from '@/lib/analytics/load';
 import { histogram, MIN_N, rollingHitRate, SCORE_BANDS, summarize } from '@/lib/analytics/stats';
 import { requireUser } from '@/lib/auth/require-user';
 import { COSTS_KEY, costsSchema } from '@/lib/market/costs';
-import { loadPortfolio } from '@/lib/analytics/portfolio-load';
+import { getCachedPipelineHealth, getCachedPortfolio, getCachedSignalFacts } from '@/lib/analytics/cache';
 import { loadHoldoutFrom, loadHoldoutStart } from '@/lib/research/holdout';
 import { OFFERING_LIKE } from '@/lib/clusters/tags';
 import { DISPLAY_KEY, displaySchema } from '@/lib/display';
@@ -67,7 +66,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
   const excludeOffering = q.off === '1';
   const horizon = HORIZONS.find((h) => String(h) === q.h) ?? GATE_HORIZON;
 
-  const [all, health, costs] = await Promise.all([loadSignalFacts(db), loadPipelineHealth(db), getSetting(db, COSTS_KEY, costsSchema)]);
+  const [all, health, costs] = await Promise.all([getCachedSignalFacts(), getCachedPipelineHealth(), getSetting(db, COSTS_KEY, costsSchema)]);
   const view: ViewOptions = { bench, net, scope, costs };
   const facts = all.filter((f) => inScope(f, view) && !(excludeOffering && f.tags.includes(OFFERING_LIKE)));
   const heldOut = all.filter((f) => f.holdout).length;
@@ -85,7 +84,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
     return `/performance?${p}`;
   };
 
-  const portfolio = await loadPortfolio(db, { signalIds: facts.filter((f) => !f.holdout).map((f) => f.id), benchmark: bench, holdDays: horizon, net, costs });
+  const portfolio = await getCachedPortfolio(facts.filter((f) => !f.holdout).map((f) => f.id), bench, horizon, net, costs);
 
   const values = excessValues(facts, horizon, view);
   const overall = summarize(values);

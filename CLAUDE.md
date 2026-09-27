@@ -243,6 +243,16 @@ After finishing each piece of work (a feature, a fix, a research finding), write
 a `# Title`, one summary paragraph, then what changed, decisions, how it was verified, follow-ups. No secrets or `.env` values.
 The MCP tools `list_work_log` / `read_work_log` (`lib/worklog.ts`) serve these files, so Claude Desktop can be told what was built.
 
+## Caching (2026-09-27)
+
+- `lib/analytics/cache.ts` wraps the dashboard's and Performance's heaviest DB-bound calls (`loadSignalFacts`, `loadPipelineHealth`,
+  `loadPortfolio`, `findBuildingClusters`) in `unstable_cache` under one tag (`ANALYTICS_TAG`), 60s TTL. MCP's `list_signals` /
+  `get_performance` reuse the same cached functions (same Next.js server process). Settings saves call `updateTag(ANALYTICS_TAG)`
+  for immediate freshness (Next 16 requires `updateTag`, not the old single-arg `revalidateTag`, for read-your-own-writes in a
+  Server Action). **Jobs run as a separate `npm run worker` CLI process and cannot reach this cache at all**, so a new signal, score
+  or matured outcome from the scheduler shows up within the 60s TTL, not instantly. `transactions_recent_buys_idx` (partial index)
+  fixed a 2s+ full scan behind the dashboard's "recent buys" panel, uncached and used on every request.
+
 ## Rules that are easy to get wrong
 
 - **Timing:** all return math keys off the filing's **acceptance datetime** (`filings.accepted_at`), not the
