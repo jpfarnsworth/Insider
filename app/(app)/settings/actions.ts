@@ -114,7 +114,7 @@ export async function notificationsAction(_prev: FormState, fd: FormData): Promi
   return save(
     NOTIFICATIONS_KEY,
     notificationsSchema,
-    { minScore: num(fd, 'minScore'), signalAlerts: checked(fd, 'signalAlerts'), jobFailures: checked(fd, 'jobFailures') },
+    { minScore: num(fd, 'minScore'), signalAlerts: checked(fd, 'signalAlerts'), jobFailures: checked(fd, 'jobFailures'), pipelineStale: checked(fd, 'pipelineStale') },
     (v) => `Saved as revision ${v}.`,
   ).then((s) => (s.status === 'ok' && s.message === 'No changes to save.' && flagRes.changed ? { ...s, message: 'Saved.' } : s));
 }

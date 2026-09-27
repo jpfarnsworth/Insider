@@ -11,6 +11,7 @@ import { refreshPricesJob } from './jobs/refresh-prices';
 import { computeOutcomesJob } from './jobs/compute-outcomes';
 import { scoreAgentJob } from './jobs/score-agent';
 import { alertSignalsJob } from './jobs/alert-signals';
+import { checkFreshnessJob } from './jobs/check-freshness';
 import { notifyJobFailure } from '@/lib/notify/alerts';
 import { JOB_NAMES, type JobName } from './job-names';
 
@@ -72,6 +73,7 @@ async function main() {
     'refresh-prices': () => refreshPricesJob(db),
     'compute-outcomes': () => computeOutcomesJob(db),
     'alert-signals': () => alertSignalsJob(db),
+    'check-freshness': () => checkFreshnessJob(db),
   };
 
   const store = drizzleJobStore(db);
@@ -88,7 +90,7 @@ async function main() {
   // Detection follows every ingest, then prices, scoring and outcomes (spec §8). Each step
   // is recorded on its own, and one failing (e.g. Alpaca is down) doesn't skip the rest.
   if (ingesting) {
-    for (const next of ['detect-clusters', 'refresh-prices', 'score-baseline', 'score-agent', 'compute-outcomes', 'alert-signals'] as const) {
+    for (const next of ['detect-clusters', 'refresh-prices', 'score-baseline', 'score-agent', 'compute-outcomes', 'alert-signals', 'check-freshness'] as const) {
       try {
         await runJob(store, next, jobs[next], onFailure);
       } catch {

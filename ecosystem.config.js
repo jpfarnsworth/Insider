@@ -57,5 +57,18 @@ module.exports = {
       watch: false,
       env: { TZ: 'America/Chicago', DB_POOL_MAX: 5 },
     },
+    // Also chained after ingest and after a standalone score-agent (worker/index.ts), so a normal day
+    // runs it twice; harmless (it's a read + a conditional alert). Its own schedule (independent of
+    // ingest) is what catches ingest's own cron never firing at all.
+    {
+      name: 'insider-check-freshness',
+      script: 'node_modules/.bin/dotenv',
+      args: '-e .env.local -- node_modules/.bin/tsx worker/index.ts check-freshness',
+      cwd: __dirname,
+      cron_restart: '0 18 * * *',
+      autorestart: false,
+      watch: false,
+      env: { TZ: 'America/Chicago', DB_POOL_MAX: 5 },
+    },
   ],
 };

@@ -34,6 +34,7 @@ npm run worker -- compute-outcomes   # forward returns for matured horizons
 npm run worker -- alert-signals   # Telegram alerts for new signals at/above the score threshold (no-op unless notifications are on)
 npm run fixtures:fetch -- YYYYMMDD ...   # re-download real Form 4 fixtures (see tests/fixtures)
 npm run prompt:distribution -- [v1|v2] [--n=100]   # dry-run score distribution for the prompt adoption check; stores nothing, reads no returns
+npm run worker -- check-freshness   # alerts if a job succeeded but produced nothing (no new filings/signals) -- see Notifications
 ```
 
 ## Architecture
@@ -178,6 +179,12 @@ There is no Row Level Security, so access control is entirely in code:
   `alert-signals` (chained after ingest and after a standalone `score-agent`) alerts once per signal
   (`signals.alerted_at`) when the baseline or agent score reaches the threshold, only for signals under 3 days old so enabling
   it never replays history. Messages are HTML-escaped; errors never include the bot token.
+- **Silent-success alerts** (`lib/notify/freshness.ts`, `checkPipelineFreshness` in `lib/notify/alerts.ts`): a job that "succeeds" while
+  ingesting or producing nothing (a changed SEC index format, an empty feed, a detection/scoring regression) never shows up as a job
+  failure. `check-freshness` (chained after ingest/score-agent, plus its own PM2 cron at 18:00 CT so it still runs if ingest's own
+  cron never fires) alerts when no filing has been accepted in 2 business days, or no signal created in 14 days. Re-alerts every
+  `RE_ALERT_AFTER_DAYS` (3) while the condition persists rather than once, and clears once it resolves so the next occurrence
+  alerts fresh. Its own `pipelineStale` notification toggle in Settings.
 - The dashboard still compares against SPY; the default-benchmark setting drives Performance and the signals list.
 
 ## MCP server (Phase 2 groundwork)

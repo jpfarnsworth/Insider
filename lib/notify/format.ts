@@ -30,3 +30,13 @@ export function signalAlertMessage(s: SignalAlert, baseUrl: string | undefined):
 /** Whether either scorer is at or above the alert threshold. */
 export const meetsThreshold = (s: Pick<SignalAlert, 'baselineScore' | 'agentScore'>, minScore: number): boolean =>
   (s.baselineScore !== null && s.baselineScore >= minScore) || (s.agentScore !== null && s.agentScore >= minScore);
+
+export function staleFilingsMessage(latestDay: string | null, businessDays: number): string {
+  const since = latestDay ? `since ${escapeHtml(latestDay)}` : 'ever';
+  return `🔇 <b>Insider Signals</b>: no new filings ${since} (${businessDays}+ business days). The daily index job is reporting success, but check whether SEC changed the index format or the feed is empty.`;
+}
+
+export function staleSignalsMessage(latestDay: string | null, days: number): string {
+  const since = latestDay ? `since ${escapeHtml(latestDay)}` : 'ever';
+  return `🔇 <b>Insider Signals</b>: no new signals ${since} (${days}+ days). Ingest may be running fine while cluster detection or scoring quietly stopped producing anything.`;
+}

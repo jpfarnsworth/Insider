@@ -276,6 +276,12 @@ export default async function SettingsPage() {
               <Check name="notifications" label="Notifications on" checked={flags.notifications} hint="The master switch (feature flag)." />
               <Check name="signalAlerts" label="Alert on new high-score signals" checked={notify.signalAlerts} />
               <Check name="jobFailures" label="Alert when a scheduled job fails" checked={notify.jobFailures} />
+              <Check
+                name="pipelineStale"
+                label="Alert when a job succeeds but produces nothing"
+                checked={notify.pipelineStale}
+                hint="No new filing in 2 business days, or no new signal in 14 days -- a changed feed or a silent regression, not an error."
+              />
             </div>
             <div className="max-w-xs">
               <Num name="minScore" label="Alert threshold (score)" value={notify.minScore} min={0} max={100} hint="Baseline or agent score at or above this." />
