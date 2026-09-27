@@ -130,7 +130,7 @@ export async function computeAndStoreOutcomes(db: Db): Promise<OutcomeStats> {
       const ended = result.rows.some((r) => r.status === 'data_ended');
       if (ended) stats.dataEnded++;
       const entryPrice = result.entryDate ? (own?.rawOpen.get(result.entryDate) ?? null) : null;
-      const status = s.status === 'amended' ? s.status : ended ? 'data_ended' : 'active';
+      const status = s.status === 'amended' || s.status === 'superseded' ? s.status : ended ? 'data_ended' : 'active';
       const dv = result.entryDate
         ? averageDollarVolume((own?.liquidity ?? []).filter((b) => b.date < result.entryDate!).slice(-VOLUME_SESSIONS))
         : null;

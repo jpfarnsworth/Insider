@@ -29,12 +29,12 @@ export default async function CompaniesPage({ searchParams }: { searchParams: Pr
              max(t.transaction_date) filter (where t.code = 'P') as last_buy,
              coalesce(sum(t.value) filter (where t.code = 'P'), 0) as buys,
              coalesce(sum(t.value) filter (where t.code = 'S'), 0) as sells,
-             (select count(*)::int from signals s where s.issuer_cik = i.cik) as signals
+             (select count(*)::int from signals s where s.issuer_cik = i.cik and s.status <> 'superseded') as signals
       from issuers i
       join transactions t on t.issuer_cik = i.cik and not t.is_derivative and t.transaction_date >= current_date - 365
       ${q ? sql`where i.name ilike ${like} or i.ticker ilike ${like}` : sql``}
       group by i.cik
-      order by (select count(*) from signals s where s.issuer_cik = i.cik) desc, max(t.transaction_date) filter (where t.code = 'P') desc nulls last
+      order by (select count(*) from signals s where s.issuer_cik = i.cik and s.status <> 'superseded') desc, max(t.transaction_date) filter (where t.code = 'P') desc nulls last
       limit 100`)
   ).rows;
 

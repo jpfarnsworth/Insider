@@ -33,7 +33,7 @@ export interface SignalFact {
   /** After the agent model's training cutoff, so it counts toward the evaluation gates. */
   postCutoff: boolean;
   avgDollarVolume: number | null;
-  status: 'active' | 'amended' | 'data_ended';
+  status: 'active' | 'amended' | 'data_ended' | 'superseded';
   /** Descriptive tags (see lib/clusters/tags.ts), e.g. 'single_day_single_price'. */
   tags: string[];
   /** In the holdout window: its outcomes are withheld (empty) until the freeze is lifted. */

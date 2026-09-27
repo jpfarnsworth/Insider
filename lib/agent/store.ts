@@ -251,6 +251,7 @@ export async function pickCandidates(db: Db, limit: number): Promise<string[]> {
     .where(
       and(
         sql`${signals.latestAgentEvalId} is null`,
+        sql`${signals.status} <> 'superseded'`,
         sql`(select count(*) from ${agentEvaluations} e where e.signal_id = ${signals.id} and e.status = 'agent_failed') < ${MAX_FAILURES}`,
         sql`not exists (select 1 from ${agentEvaluations} e where e.signal_id = ${signals.id} and e.status = 'agent_failed' and e.created_at > now() - make_interval(hours => ${RETRY_AFTER_FAILURE_HOURS}))`,
       ),

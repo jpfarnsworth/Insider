@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { eq, ne, sql } from 'drizzle-orm';
 import type { Db } from '@/lib/db';
 import { agentEvaluations, clusters, issuers, signalOutcomes, signals } from '@/db/schema';
 import { isPostCutoff } from '@/lib/agent/models';
@@ -36,7 +36,9 @@ export async function loadSignalFacts(db: Db): Promise<SignalFact[]> {
       .from(signals)
       .innerJoin(clusters, eq(clusters.id, signals.clusterId))
       .innerJoin(issuers, eq(issuers.cik, signals.issuerCik))
-      .leftJoin(agentEvaluations, eq(agentEvaluations.id, signals.latestAgentEvalId)),
+      .leftJoin(agentEvaluations, eq(agentEvaluations.id, signals.latestAgentEvalId))
+      // Duplicates of an earlier signal (lib/clusters/dedupe.ts) never count.
+      .where(ne(signals.status, 'superseded')),
     db.select().from(signalOutcomes),
     // Same title rules as roleOf(): CEO/CFO first, then any officer, then a director.
     db.execute<{ cluster_id: string; ceo_cfo: boolean; officer: boolean; director: boolean }>(sql`

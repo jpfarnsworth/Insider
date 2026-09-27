@@ -50,16 +50,23 @@ export function evaluateGates(facts: SignalFact[], view: ViewOptions, health: Pi
     detail: `${complete} of ${GATE_MIN_SIGNALS}`,
   };
 
-  const tiers = tiersFor(facts);
-  const top = summarize(excessValues(facts.filter(tiers.isTop), GATE_HORIZON, view));
-  const agent = summarize(excessValues(facts.filter(tiers.isAgentTop), GATE_HORIZON, view));
-  const baseline = summarize(excessValues(facts.filter(tiers.isBaselineTop), GATE_HORIZON, view));
+  // Gates 2 and 3 compare tiers, so both scorers must have judged the same signals. While the agent has
+  // scored only some of them (it works newest first, and different months can behave very differently),
+  // the baseline tier over all signals against an agent tier over the scored ones compares different
+  // periods, not different scorers. Once every signal is scored this is exactly the spec's population.
+  const scored = facts.filter((f) => f.agentScore !== null);
+  const pool = scored.length > 0 ? scored : facts;
+  const basis = pool.length === facts.length ? '' : ` [on ${pool.length} signals scored by both]`;
+  const tiers = tiersFor(pool);
+  const top = summarize(excessValues(pool.filter(tiers.isTop), GATE_HORIZON, view));
+  const agent = summarize(excessValues(pool.filter(tiers.isAgentTop), GATE_HORIZON, view));
+  const baseline = summarize(excessValues(pool.filter(tiers.isBaselineTop), GATE_HORIZON, view));
 
   const gate2: Gate = {
     id: 2,
     title: `Top-tier signals show a positive average ${GATE_HORIZON}-day excess return vs ${view.bench}`,
     status: !top.sufficient ? 'insufficient' : top.mean > 0 ? 'pass' : 'fail',
-    detail: tierLine('Agent >= 70 or baseline top third', top),
+    detail: tierLine('Agent >= 70 or baseline top third', top) + basis,
   };
 
   const both = agent.sufficient && baseline.sufficient;
@@ -69,9 +76,9 @@ export function evaluateGates(facts: SignalFact[], view: ViewOptions, health: Pi
     status: both ? 'pass' : 'insufficient',
     detail: both
       ? agent.mean > baseline.mean
-        ? `Agent wins: ${tierLine('agent', agent)} vs ${tierLine('baseline', baseline)}`
-        : `Baseline wins, so drop the agent: ${tierLine('agent', agent)} vs ${tierLine('baseline', baseline)}`
-      : `${tierLine('Agent tier', agent)}; ${tierLine('baseline tier', baseline)}`,
+        ? `Agent wins: ${tierLine('agent', agent)} vs ${tierLine('baseline', baseline)}${basis}`
+        : `Baseline wins, so drop the agent: ${tierLine('agent', agent)} vs ${tierLine('baseline', baseline)}${basis}`
+      : `${tierLine('Agent tier', agent)}; ${tierLine('baseline tier', baseline)}${basis}`,
   };
 
   const parseRate = health.filings ? health.parseFailures / health.filings : 0;

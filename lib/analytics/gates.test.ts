@@ -49,7 +49,7 @@ describe('gate 2: top tier has positive net excess', () => {
 
   it('counts agent >= 70 signals in the top tier even with a low baseline', () => {
     // Baseline top third of 28 is 10 signals (3 strong-baseline + 7 agent ones); the union adds all 25 agent-tier signals.
-    const g = gate([...many(25, { baseline: 30, agent: 80, excess: 6 }), ...many(3, { baseline: 90, excess: 2 })], healthy, 2);
+    const g = gate([...many(25, { baseline: 30, agent: 80, excess: 6 }), ...many(3, { baseline: 90, agent: 60, excess: 2 })], healthy, 2);
     expect(g.detail).toContain('n=28');
     expect(g.status).toBe('pass');
   });
@@ -61,17 +61,36 @@ describe('gate 3: agent versus baseline', () => {
   });
 
   it('passes when the agent tier beats the baseline tier', () => {
-    const facts = [...many(25, { baseline: 90, excess: 2 }), ...many(25, { baseline: 40, agent: 80, excess: 6 }), ...many(20, { baseline: 40 })];
+    const facts = [...many(25, { baseline: 90, agent: 60, excess: 2 }), ...many(25, { baseline: 40, agent: 80, excess: 6 }), ...many(20, { baseline: 40, agent: 60 })];
     const g = gate(facts, healthy, 3);
     expect(g.status).toBe('pass');
     expect(g.detail).toMatch(/^Agent wins/);
   });
 
   it('also passes, deciding to drop the agent, when the baseline tier does better', () => {
-    const facts = [...many(25, { baseline: 90, excess: 7 }), ...many(25, { baseline: 40, agent: 80, excess: 1 }), ...many(20, { baseline: 40 })];
+    const facts = [...many(25, { baseline: 90, agent: 60, excess: 7 }), ...many(25, { baseline: 40, agent: 80, excess: 1 }), ...many(20, { baseline: 40, agent: 60 })];
     const g = gate(facts, healthy, 3);
     expect(g.status).toBe('pass');
     expect(g.detail).toMatch(/^Baseline wins, so drop the agent/);
+  });
+});
+
+describe('gates 2 and 3 compare like with like', () => {
+  it('ignores signals the agent has not scored, so a partial batch cannot skew the tiers', () => {
+    // 30 unscored baseline-strong signals that did badly must not drag the baseline tier below the agent's.
+    const scoredBaseline = many(25, { baseline: 90, agent: 60, excess: 5 });
+    const scoredAgent = many(25, { baseline: 40, agent: 80, excess: 3 });
+    const filler = many(20, { baseline: 40, agent: 55, excess: 1 });
+    const unscored = many(30, { baseline: 95, agent: null, excess: -10 });
+    const g = gate([...scoredBaseline, ...scoredAgent, ...filler, ...unscored], healthy, 3);
+    expect(g.detail).toMatch(/^Baseline wins/); // baseline +5 vs agent +3 on the scored set
+    expect(g.detail).toContain('[on 70 signals scored by both]');
+  });
+
+  it('falls back to every signal while the agent has scored none', () => {
+    const g = gate([...many(30, { baseline: 90, agent: null, excess: 4 }), ...many(30, { baseline: 40, agent: null, excess: 1 })], healthy, 2);
+    expect(g.status).toBe('pass');
+    expect(g.detail).not.toContain('scored by both');
   });
 });
 
@@ -106,7 +125,7 @@ describe('gate 4: pipeline health', () => {
 
 describe('allGatesPass', () => {
   it('needs every gate to pass', () => {
-    const facts = [...many(30, { baseline: 90, excess: 4 }), ...many(30, { baseline: 40, agent: 80, excess: 6 }), ...many(20, { baseline: 40, excess: 1 })];
+    const facts = [...many(30, { baseline: 90, agent: 60, excess: 4 }), ...many(30, { baseline: 40, agent: 80, excess: 6 }), ...many(20, { baseline: 40, agent: 60, excess: 1 })];
     const gates = evaluateGates(facts, view, healthy);
     expect(gates.map((x) => x.status)).toEqual(['pass', 'pass', 'pass', 'pass']);
     expect(allGatesPass(gates)).toBe(true);

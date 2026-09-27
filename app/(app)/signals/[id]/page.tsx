@@ -225,6 +225,13 @@ export default async function SignalDetailPage({ params }: { params: Promise<{ i
         </Card>
       </div>
 
+      {signal.signalStatus === 'superseded' ? (
+        <p role="note" className="bg-warning-bg text-warning mb-6 rounded-lg px-3 py-2 text-sm">
+          Superseded: this is a duplicate of an earlier signal for the same purchases (their trigger filing changed, for example after an amendment). It is kept for
+          the record but left out of every list, statistic and alert.
+        </p>
+      ) : null}
+
       <Performance
         signal={{ id: signal.id, ticker: signal.ticker, entryDate: signal.entryDate, entryPrice: signal.entryPrice, status: signal.signalStatus, signalAt: signal.signalAt }}
       />

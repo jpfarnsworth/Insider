@@ -97,7 +97,7 @@ There is no Row Level Security, so access control is entirely in code:
 - Purchases arrive in acceptance order; the signal time is the acceptance of the filing that first completed the rule and
   never moves after creation. Identical transactions in different filings (fund + adviser) count once, and a filing that a
   parsed 4/A amends is replaced by the amendment's transactions.
-- A stored cluster that detection no longer produces is left alone, never deleted, because its signal may carry scores.
+- A stored cluster that detection no longer produces is left alone, never deleted, because its signal may carry scores (one that duplicates an earlier signal's purchases is marked `superseded`, see Research integrity).
 - `lib/scoring/baseline.ts` is the deterministic score (weights in `settings` as `baseline_weights`, breakdown stored in
   `signals.baseline_breakdown`). Components without data (e.g. market cap, still empty) are re-weighted, not zeroed.
   Bump `BASELINE_VERSION` when the formula changes; `score-baseline` re-scores older versions. v2 adds the price-context
@@ -210,6 +210,15 @@ There is no Row Level Security, so access control is entirely in code:
   per-signal averages do; the two can differ. Its per-signal return math reproduces `signal_outcomes` exactly.
 - **Dollar volume**: `signals.avg_dollar_volume` picks the cost tier and unknown counts as thin (1.0%). It was found empty for 96%
   of signals (stale until `compute-outcomes` re-ran), overstating costs. `/system` now shows how many signals lack it; run compute-outcomes if it is high.
+- **Duplicate signals**: detection matches a stored cluster to a detected one by trigger filing, so when the trigger changed (a 4/A
+  replaced the filing that completed the rule, or late filings shifted the order) the same purchases got a second signal, sometimes
+  months later (found 2026-09-26: 9 of 535, e.g. GME, RWT, TRIN). Now a detected cluster that shares a purchase with a stored one is
+  skipped in `reconcileIssuer`, and `supersedeDuplicateSignals` (`lib/clusters/dedupe.ts`, run at the end of `detect-clusters`) marks
+  earlier-duplicates `superseded`, keeping the earliest signal (when the market first knew). Superseded rows are kept, never deleted,
+  and excluded from facts, lists, stats, alerts and agent runs; the signal page shows a banner.
+- **Gates 2 and 3 use signals scored by both scorers** (`lib/analytics/gates.ts`). The agent works newest first, so comparing an
+  agent tier over the scored months with a baseline tier over all months compared periods, not scorers (it briefly showed
+  "Agent wins"; on the same signals the baseline tier was ahead). Identical to the spec once every signal is scored.
 - Gemini: the request has no `tools` (no Search grounding); the model's documented cutoff is January 2025 (`lib/agent/models.ts`).
 
 ## Work log

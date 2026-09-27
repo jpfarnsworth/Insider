@@ -1,4 +1,4 @@
-import { and, eq, gte, isNull } from 'drizzle-orm';
+import { and, eq, gte, isNull, ne } from 'drizzle-orm';
 import type { Db } from '@/lib/db';
 import { agentEvaluations, clusters, issuers, signals } from '@/db/schema';
 import { getFlags } from '@/lib/flags';
@@ -37,7 +37,7 @@ export async function alertNewSignals(db: Db, now: Date = new Date()): Promise<{
     .innerJoin(clusters, eq(clusters.id, signals.clusterId))
     .innerJoin(issuers, eq(issuers.cik, signals.issuerCik))
     .leftJoin(agentEvaluations, eq(agentEvaluations.id, signals.latestAgentEvalId))
-    .where(and(isNull(signals.alertedAt), gte(signals.signalAt, new Date(now.getTime() - ALERT_WINDOW_DAYS * DAY_MS))));
+    .where(and(isNull(signals.alertedAt), ne(signals.status, 'superseded'), gte(signals.signalAt, new Date(now.getTime() - ALERT_WINDOW_DAYS * DAY_MS))));
 
   let sent = 0;
   for (const r of rows) {

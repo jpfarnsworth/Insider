@@ -4,6 +4,7 @@ import type { Db } from '@/lib/db';
 import { clusterEvents, clusters, clusterTransactions, filingOwners, filings, insiders, issuers, signals, transactions } from '@/db/schema';
 import { getRevision, getSetting } from '@/lib/settings';
 import { detectClusters, type DetectedCluster, type Purchase } from './detect';
+import { findDuplicates } from './dedupe';
 import { tagsFor } from './tags';
 import { CLUSTER_RULE_KEY, CLUSTER_RULE_VERSION, clusterRuleSchema, type ClusterRule } from './rule';
 
@@ -110,6 +111,12 @@ const groupByTrigger = <T extends { triggerFilingId: string | null; windowStart:
  */
 async function reconcileIssuer(tx: Tx, issuerCik: string, detected: DetectedCluster[], ruleRevision: number) {
   const existing = await tx.select().from(clusters).where(eq(clusters.issuerCik, issuerCik));
+  // Purchases already in a stored cluster: a detected cluster that shares one of them is that episode, not a new signal.
+  const storedMembers = new Set(
+    existing.length
+      ? (await tx.select({ t: clusterTransactions.transactionId }).from(clusterTransactions).where(inArray(clusterTransactions.clusterId, existing.map((c) => c.id)))).map((r) => r.t)
+      : [],
+  );
   const existingByTrigger = groupByTrigger(existing);
   const seen = new Map<string, number>();
   let created = 0;
@@ -142,6 +149,10 @@ async function reconcileIssuer(tx: Tx, issuerCik: string, detected: DetectedClus
       // Tags follow the members, which can change as later purchases join; the signal itself never moves.
       await tx.update(signals).set({ tags: tagsFor(d.members, d.insiderCount) }).where(eq(signals.clusterId, clusterId));
       updated++;
+    } else if (d.members.some((m) => storedMembers.has(m.id))) {
+      // Same buying as a stored cluster whose trigger filing changed (an amendment, or late filings): keep
+      // the original signal, whose time records when the market first knew, instead of adding a second.
+      continue;
     } else {
       [{ id: clusterId }] = await tx.insert(clusters).values({ issuerCik, ...fields }).returning({ id: clusters.id });
       // The signal time is fixed at creation for return tracking (spec §4.2).
@@ -162,6 +173,37 @@ export interface DetectStats {
   clusters: number;
   created: number;
   updated: number;
+  /** Signals newly marked as duplicates of an earlier one. */
+  superseded: number;
+}
+
+/**
+ * Marks signals that duplicate an earlier one (same purchases, see findDuplicates) as superseded.
+ * Idempotent; returns how many it changed. Superseded signals stay in the database but are left out
+ * of every list, statistic, alert and agent run.
+ */
+export async function supersedeDuplicateSignals(db: Db): Promise<number> {
+  const rows = await db
+    .select({ issuerCik: clusters.issuerCik, clusterId: clusters.id, signalAt: signals.signalAt, transactionId: clusterTransactions.transactionId })
+    .from(clusters)
+    .innerJoin(signals, eq(signals.clusterId, clusters.id))
+    .innerJoin(clusterTransactions, eq(clusterTransactions.clusterId, clusters.id));
+  const byIssuer = new Map<string, Map<string, { id: string; signalAt: number; transactionIds: string[] }>>();
+  for (const r of rows) {
+    const issuer = byIssuer.get(r.issuerCik) ?? new Map();
+    const c = issuer.get(r.clusterId) ?? { id: r.clusterId, signalAt: r.signalAt.getTime(), transactionIds: [] };
+    c.transactionIds.push(r.transactionId);
+    issuer.set(r.clusterId, c);
+    byIssuer.set(r.issuerCik, issuer);
+  }
+  const doomed = [...byIssuer.values()].flatMap((m) => findDuplicates([...m.values()])).flatMap((g) => g.supersede);
+  if (!doomed.length) return 0;
+  const changed = await db
+    .update(signals)
+    .set({ status: 'superseded' })
+    .where(and(inArray(signals.clusterId, doomed), sql`${signals.status} <> 'superseded'`))
+    .returning({ id: signals.id });
+  return changed.length;
 }
 
 /** Runs detection for every issuer that could form a cluster and stores the result. Idempotent. */
@@ -169,7 +211,7 @@ export async function detectAndStoreClusters(db: Db, asOf: string, rule?: Cluste
   const r = rule ?? (await loadClusterRule(db));
   const ruleRevision = await getRevision(db, CLUSTER_RULE_KEY);
   const ciks = await candidateIssuers(db, r.minInsiders);
-  const stats: DetectStats = { issuersScanned: ciks.length, clusters: 0, created: 0, updated: 0 };
+  const stats: DetectStats = { issuersScanned: ciks.length, clusters: 0, created: 0, updated: 0, superseded: 0 };
 
   for (let i = 0; i < ciks.length; i += CHUNK) {
     const chunk = ciks.slice(i, i + CHUNK);
@@ -188,6 +230,7 @@ export async function detectAndStoreClusters(db: Db, asOf: string, rule?: Cluste
       stats.updated += res.updated;
     }
   }
+  stats.superseded = await supersedeDuplicateSignals(db);
   return stats;
 }
 

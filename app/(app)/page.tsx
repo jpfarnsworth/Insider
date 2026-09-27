@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, ne, sql } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { clusters, filings, filingOwners, insiders, issuers, jobRuns, signals, transactions } from '@/db/schema';
 import { agentUsage } from '@/lib/agent/store';
@@ -65,6 +65,7 @@ export default async function DashboardPage() {
       .select({ id: signals.id, entryDate: signals.entryDate, ticker: issuers.ticker })
       .from(signals)
       .innerJoin(issuers, eq(issuers.cik, signals.issuerCik))
+      .where(ne(signals.status, 'superseded'))
       .orderBy(desc(signals.signalAt))
       .limit(10),
     db.selectDistinctOn([jobRuns.jobName], { jobName: jobRuns.jobName, status: jobRuns.status, startedAt: jobRuns.startedAt }).from(jobRuns).orderBy(jobRuns.jobName, desc(jobRuns.startedAt)),

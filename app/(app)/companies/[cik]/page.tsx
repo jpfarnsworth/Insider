@@ -1,7 +1,7 @@
 import { isHeldOut, loadHoldoutFrom } from '@/lib/research/holdout';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { and, asc, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, ne, sql } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { agentEvaluations, clusters, filings, insiders, issuers, priceBars, signalOutcomes, signals, transactions } from '@/db/schema';
 import { requireUser } from '@/lib/auth/require-user';
@@ -109,7 +109,7 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
       .from(signals)
       .innerJoin(clusters, eq(clusters.id, signals.clusterId))
       .leftJoin(agentEvaluations, eq(agentEvaluations.id, signals.latestAgentEvalId))
-      .where(eq(signals.issuerCik, cik))
+      .where(and(eq(signals.issuerCik, cik), ne(signals.status, 'superseded')))
       .orderBy(desc(signals.signalAt)),
   ]);
 

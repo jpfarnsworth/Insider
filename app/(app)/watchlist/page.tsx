@@ -29,7 +29,7 @@ export default async function WatchlistPage() {
       buyers12: sql<number>`(select count(distinct t.insider_cik)::int from ${transactions} t where t.issuer_cik = ${issuers.cik} and t.code = 'P' and not t.is_derivative and t.transaction_date >= current_date - 365)`,
       clusterStatus: sql<string | null>`(select c.status from ${clusters} c where c.issuer_cik = ${issuers.cik} order by c.created_at desc limit 1)`,
       clusterInsiders: sql<number | null>`(select c.insider_count from ${clusters} c where c.issuer_cik = ${issuers.cik} order by c.created_at desc limit 1)`,
-      signalId: sql<string | null>`(select s.id from signals s where s.issuer_cik = ${issuers.cik} order by s.signal_at desc limit 1)`,
+      signalId: sql<string | null>`(select s.id from signals s where s.issuer_cik = ${issuers.cik} and s.status <> 'superseded' order by s.signal_at desc limit 1)`,
     })
     .from(watchlist)
     .innerJoin(issuers, eq(issuers.cik, watchlist.issuerCik))

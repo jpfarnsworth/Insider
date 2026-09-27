@@ -92,7 +92,7 @@ export const signals = pgTable(
     // Points at agent_evaluations.id; intentionally not an FK to avoid a
     // circular dependency between the two tables.
     latestAgentEvalId: uuid('latest_agent_eval_id'),
-    status: text('status', { enum: ['active', 'amended', 'data_ended'] })
+    status: text('status', { enum: ['active', 'amended', 'data_ended', 'superseded'] })
       .notNull()
       .default('active'),
     tags: text('tags').array().notNull().default([]),
