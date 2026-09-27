@@ -2,14 +2,19 @@ import { eq, sql } from 'drizzle-orm';
 import type { Db } from '@/lib/db';
 import { agentEvaluations, clusters, issuers, signalOutcomes, signals } from '@/db/schema';
 import { isPostCutoff } from '@/lib/agent/models';
+import { isHeldOut, loadHoldoutFrom } from '@/lib/research/holdout';
 import type { Bench, OutcomeFact, RoleMix, SignalFact } from './facts';
 import type { PipelineHealth } from './gates';
 
 const num = (v: string | null): number | null => (v === null ? null : Number(v));
 
-/** Every signal with its scores, cluster, roles and outcomes at every horizon. Read once per request. */
+/**
+ * Every signal with its scores, cluster, roles and outcomes at every horizon. Read once per request.
+ * Signals in the holdout window (lib/research/holdout.ts) come back with no outcomes.
+ */
 export async function loadSignalFacts(db: Db): Promise<SignalFact[]> {
-  const [base, outcomes, roles] = await Promise.all([
+  const [heldFrom, base, outcomes, roles] = await Promise.all([
+    loadHoldoutFrom(db),
     db
       .select({
         id: signals.id,
@@ -26,6 +31,7 @@ export async function loadSignalFacts(db: Db): Promise<SignalFact[]> {
         avgDollarVolume: signals.avgDollarVolume,
         status: signals.status,
         clusterId: signals.clusterId,
+        tags: signals.tags,
       })
       .from(signals)
       .innerJoin(clusters, eq(clusters.id, signals.clusterId))
@@ -78,7 +84,10 @@ export async function loadSignalFacts(db: Db): Promise<SignalFact[]> {
     postCutoff: isPostCutoff(b.signalAt),
     avgDollarVolume: num(b.avgDollarVolume),
     status: b.status,
-    outcomes: bySignal.get(b.id) ?? {},
+    tags: b.tags,
+    holdout: isHeldOut(b.signalAt.getTime(), heldFrom),
+    // Held-out signals carry no returns, so no aggregate, tier, gate or export can see them.
+    outcomes: isHeldOut(b.signalAt.getTime(), heldFrom) ? {} : (bySignal.get(b.id) ?? {}),
   }));
 }
 

@@ -36,6 +36,8 @@ export async function GET(req: Request) {
       'cluster_status',
       'signal_status',
       'after_model_cutoff',
+      'tags',
+      'held_out',
       ...HORIZONS.map((h) => `excess_${h}d_net_vs_${view.bench}_pct`),
     ],
     list.map((r) => [
@@ -51,6 +53,8 @@ export async function GET(req: Request) {
       r.clusterStatus,
       r.status,
       r.postCutoff ? 'yes' : 'no',
+      r.tags.join(' '),
+      r.holdout ? 'yes' : 'no',
       ...HORIZONS.map((h) => {
         const v = excessAt(r, h, view);
         return v === null ? null : Number(v.toFixed(2));

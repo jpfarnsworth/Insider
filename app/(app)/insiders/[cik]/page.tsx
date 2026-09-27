@@ -19,6 +19,7 @@ const CODE_NAME: Record<string, string> = { P: 'Purchase', S: 'Sale', A: 'Award'
 
 function Excess({ status, v }: { status: PurchaseOutcome['status30']; v: number | null }) {
   if (status === 'no_prices') return <span className="text-muted-foreground text-xs">no prices</span>;
+  if (status === 'held_out') return <span className="text-muted-foreground text-xs">held out</span>;
   if (status === 'pending') return <span className="text-muted-foreground text-xs">pending</span>;
   if (v === null) return <span className="text-muted-foreground">—</span>;
   return <span className={cn('font-mono tabular-nums', v > 0 ? 'text-positive' : v < 0 ? 'text-negative' : '')}>{formatPct(v)}</span>;

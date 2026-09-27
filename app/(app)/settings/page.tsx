@@ -8,6 +8,7 @@ import { COSTS_KEY, costsSchema } from '@/lib/market/costs';
 import { NOTIFICATIONS_KEY, notificationsSchema } from '@/lib/notify/settings';
 import { telegramConfigured } from '@/lib/notify/telegram';
 import { BASELINE_VERSION, BASELINE_WEIGHTS_KEY, baselineWeightsSchema } from '@/lib/scoring/baseline';
+import { HOLDOUT_KEY, holdoutSchema } from '@/lib/research/holdout';
 import { getSetting, listVersions } from '@/lib/settings';
 import { formatDateTime } from '@/lib/format';
 import { PageHeader } from '@/components/page-header';
@@ -21,6 +22,7 @@ import {
   costsAction,
   displayAction,
   flagsAction,
+  holdoutAction,
   notificationsAction,
 } from './actions';
 
@@ -90,6 +92,7 @@ export default async function SettingsPage() {
     getFlags(db),
   ]);
   const notify = await getSetting(db, NOTIFICATIONS_KEY, notificationsSchema);
+  const holdout = await getSetting(db, HOLDOUT_KEY, holdoutSchema);
   const telegram = telegramConfigured();
 
   return (
@@ -181,6 +184,25 @@ export default async function SettingsPage() {
             </div>
           </SettingsForm>
           <History settingKey={FLAGS_KEY} />
+        </Section>
+
+        <Section
+          title="Holdout"
+          description="Signals from this day on are the untouched test window. Their returns stay out of every aggregate, gate, list, export and MCP tool until you reveal them, so tuning the rule or scores can't peek at them. Freeze the design first, then reveal once."
+        >
+          <SettingsForm action={holdoutAction}>
+            <label className="flex max-w-xs flex-col gap-1 text-sm">
+              <span>Held out from (Chicago date)</span>
+              <Input type="date" name="from" defaultValue={holdout.from} required className="font-mono" />
+            </label>
+            <Check
+              name="reveal"
+              label="Reveal the holdout"
+              checked={holdout.reveal}
+              hint="Lifts the freeze. Each save is recorded in the history below, so revealing is an auditable event."
+            />
+          </SettingsForm>
+          <History settingKey={HOLDOUT_KEY} />
         </Section>
 
         <Section

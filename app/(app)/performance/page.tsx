@@ -20,6 +20,9 @@ import { loadPipelineHealth, loadSignalFacts } from '@/lib/analytics/load';
 import { histogram, MIN_N, rollingHitRate, SCORE_BANDS, summarize } from '@/lib/analytics/stats';
 import { requireUser } from '@/lib/auth/require-user';
 import { COSTS_KEY, costsSchema } from '@/lib/market/costs';
+import { loadPortfolio } from '@/lib/analytics/portfolio-load';
+import { loadHoldoutFrom } from '@/lib/research/holdout';
+import { OFFERING_LIKE } from '@/lib/clusters/tags';
 import { DISPLAY_KEY, displaySchema } from '@/lib/display';
 import { formatPct, formatRate } from '@/lib/format';
 import { getSetting } from '@/lib/settings';
@@ -60,20 +63,25 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
   const bench: Bench = q.bench === 'IWM' || q.bench === 'SPY' ? q.bench : display.defaultBenchmark;
   const net = q.net !== '0';
   const scope = q.scope === 'all' ? 'all' : 'post';
+  const excludeOffering = q.off === '1';
   const horizon = HORIZONS.find((h) => String(h) === q.h) ?? GATE_HORIZON;
 
   const [all, health, costs] = await Promise.all([loadSignalFacts(db), loadPipelineHealth(db), getSetting(db, COSTS_KEY, costsSchema)]);
   const view: ViewOptions = { bench, net, scope, costs };
-  const facts = all.filter((f) => inScope(f, view));
+  const facts = all.filter((f) => inScope(f, view) && !(excludeOffering && f.tags.includes(OFFERING_LIKE)));
+  const heldOut = all.filter((f) => f.holdout).length;
+  const heldFrom = await loadHoldoutFrom(db);
 
   // The gates always use the spec's basis (post-cutoff, net of costs) whatever the toggles say.
   const gateView: ViewOptions = { bench, net: true, scope: 'post', costs };
   const gates = evaluateGates(all.filter((f) => inScope(f, gateView)), gateView, health);
 
   const href = (over: Record<string, string>) => {
-    const p = new URLSearchParams({ bench, net: net ? '1' : '0', scope, h: String(horizon), ...over });
+    const p = new URLSearchParams({ bench, net: net ? '1' : '0', scope, h: String(horizon), off: excludeOffering ? '1' : '0', ...over });
     return `/performance?${p}`;
   };
+
+  const portfolio = await loadPortfolio(db, { signalIds: facts.filter((f) => !f.holdout).map((f) => f.id), benchmark: bench, holdDays: horizon, net, costs });
 
   const values = excessValues(facts, horizon, view);
   const overall = summarize(values);
@@ -103,6 +111,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
         <Toggle label="Returns" options={[['1', 'Net of costs'], ['0', 'Gross']]} current={net ? '1' : '0'} href={(v) => href({ net: v })} />
         <Toggle label="Benchmark" options={[['SPY', 'SPY'], ['IWM', 'IWM']]} current={bench} href={(v) => href({ bench: v })} />
         <Toggle label="Signals" options={[['post', 'After model cutoff'], ['all', 'All']]} current={scope} href={(v) => href({ scope: v })} />
+        <Toggle label="Offering-like" options={[['0', 'Include'], ['1', 'Exclude']]} current={excludeOffering ? '1' : '0'} href={(v) => href({ off: v })} />
         <Toggle label="Horizon" options={HORIZONS.map((h) => [String(h), `${h}d`] as [string, string])} current={String(horizon)} href={(v) => href({ h: v })} />
       </div>
 
@@ -112,6 +121,70 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
           Their agent scores are not evidence. Use post-cutoff signals to judge the agent.
         </p>
       ) : null}
+
+      {heldFrom ? (
+        <p role="note" className="bg-info-bg text-info mb-6 rounded-lg px-3 py-2 text-sm">
+          {heldOut.toLocaleString()} signal{heldOut === 1 ? '' : 's'} from {heldFrom} on are held out: no returns, tiers or gates include them. Lift the holdout in Settings once the design is frozen.
+        </p>
+      ) : null}
+      {excludeOffering ? (
+        <p role="note" className="bg-warning-bg text-warning mb-6 rounded-lg px-3 py-2 text-sm">
+          The offering-like exclusion was chosen after looking at results on these signals, so a better number here is a hypothesis, not evidence. Judge it on the holdout. The gates below still use every signal.
+        </p>
+      ) : null}
+
+      <section aria-labelledby="portfolio" className="mb-8">
+        <Card>
+          <CardHeader>
+            <CardTitle id="portfolio">Calendar-time portfolio</CardTitle>
+            <CardDescription>
+              Hold every signal from its entry open for {horizon} sessions, equal weight, and track the portfolio&apos;s daily {unit}. Signals overlap in time and share market moves, so
+              counting each as an independent observation overstates confidence; this daily series is the honest test. The t-statistic uses Newey-West standard errors.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {portfolio.stats ? (
+              <>
+                <dl className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                  {(
+                    [
+                      ['Days', portfolio.stats.days.toLocaleString()],
+                      ['Avg signals held', portfolio.stats.avgHeld.toFixed(1)],
+                      ['Mean daily excess', `${formatPct(portfolio.stats.meanDaily * 100, 1).replace('%', '')} bp`],
+                      ['Annualised', formatPct(portfolio.stats.annualised, 1)],
+                      [`t (Newey-West, lag ${portfolio.stats.lag})`, Number.isNaN(portfolio.stats.t) ? '—' : portfolio.stats.t.toFixed(2)],
+                    ] as const
+                  ).map(([label, value]) => (
+                    <div key={label} className="bg-card rounded-lg border p-3">
+                      <dt className="text-muted-foreground text-xs">{label}</dt>
+                      <dd className="mt-1 font-mono text-lg tabular-nums">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <LineChart
+                  measure="Cumulative portfolio excess"
+                  zeroLine
+                  format={{ kind: 'pct', digits: 0 }}
+                  formatX="day"
+                  series={[
+                    {
+                      key: 'portfolio',
+                      label: `Portfolio vs ${bench}`,
+                      color: 'var(--viz-1)',
+                      points: portfolio.cumulative.map((p) => ({ x: Date.parse(`${p.date}T00:00:00Z`), y: p.value })),
+                    },
+                  ]}
+                />
+                <p className="text-muted-foreground text-xs">
+                  {portfolio.signals.toLocaleString()} signals with prices. The line is a running sum of daily excess (percent points), not compounded. Held-out signals are excluded.
+                </p>
+              </>
+            ) : (
+              <p className="text-muted-foreground text-sm">Not enough price history to build the portfolio yet.</p>
+            )}
+          </CardContent>
+        </Card>
+      </section>
 
       <section aria-labelledby="gates" className="mb-8">
         <Card>

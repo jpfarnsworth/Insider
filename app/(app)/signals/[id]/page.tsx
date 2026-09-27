@@ -226,7 +226,7 @@ export default async function SignalDetailPage({ params }: { params: Promise<{ i
       </div>
 
       <Performance
-        signal={{ id: signal.id, ticker: signal.ticker, entryDate: signal.entryDate, entryPrice: signal.entryPrice, status: signal.signalStatus }}
+        signal={{ id: signal.id, ticker: signal.ticker, entryDate: signal.entryDate, entryPrice: signal.entryPrice, status: signal.signalStatus, signalAt: signal.signalAt }}
       />
 
       <Context signalId={signal.id} issuerCik={signal.issuerCik} signalAt={signal.signalAt} latestEvalId={signal.latestAgentEvalId} />

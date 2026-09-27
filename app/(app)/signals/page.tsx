@@ -19,6 +19,7 @@ import {
   type SignalFilters,
   type SortKey,
 } from '@/lib/signals/filters';
+import { OFFERING_LIKE } from '@/lib/clusters/tags';
 import { loadSignalRows } from '@/lib/signals/load';
 import { EmptyState, PageHeader } from '@/components/page-header';
 import { ScoreBadge } from '@/components/score-badge';
@@ -145,6 +146,13 @@ export default async function SignalsPage({ searchParams }: { searchParams: Prom
                 ))}
               </select>
             </Field>
+            <Field label="Offering-like buys">
+              <select name="offering" defaultValue={filters.offering ?? ''} className={selectClass}>
+                <option value="">Include</option>
+                <option value="exclude">Exclude</option>
+                <option value="only">Only these</option>
+              </select>
+            </Field>
             <Field label="Cluster status">
               <select name="status" defaultValue={filters.status ?? ''} className={selectClass}>
                 <option value="">Any</option>
@@ -258,6 +266,11 @@ export default async function SignalsPage({ searchParams }: { searchParams: Prom
                         <Link href={`/signals/${r.id}`} className="hover:text-primary flex items-center gap-2">
                           {r.ticker ? <span className="font-mono font-medium">{r.ticker}</span> : null}
                           <span className="text-muted-foreground max-w-64 truncate">{r.issuer}</span>
+                          {r.tags.includes(OFFERING_LIKE) ? (
+                            <Badge variant="outline" title="Every purchase on one day at one price, like an offering or conversion allotment">
+                              offering-like
+                            </Badge>
+                          ) : null}
                         </Link>
                       </td>
                       <td className="px-4 py-2.5 whitespace-nowrap">{formatDateTime(new Date(r.signalAt))}</td>

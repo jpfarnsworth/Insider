@@ -4,6 +4,7 @@ import type { Db } from '@/lib/db';
 import { clusterEvents, clusters, clusterTransactions, filingOwners, filings, insiders, issuers, signals, transactions } from '@/db/schema';
 import { getRevision, getSetting } from '@/lib/settings';
 import { detectClusters, type DetectedCluster, type Purchase } from './detect';
+import { tagsFor } from './tags';
 import { CLUSTER_RULE_KEY, CLUSTER_RULE_VERSION, clusterRuleSchema, type ClusterRule } from './rule';
 
 const CHUNK = 100;
@@ -138,11 +139,13 @@ async function reconcileIssuer(tx: Tx, issuerCik: string, detected: DetectedClus
       await tx.update(clusters).set(fields).where(eq(clusters.id, clusterId));
       await tx.delete(clusterTransactions).where(eq(clusterTransactions.clusterId, clusterId));
       await tx.delete(clusterEvents).where(eq(clusterEvents.clusterId, clusterId));
+      // Tags follow the members, which can change as later purchases join; the signal itself never moves.
+      await tx.update(signals).set({ tags: tagsFor(d.members, d.insiderCount) }).where(eq(signals.clusterId, clusterId));
       updated++;
     } else {
       [{ id: clusterId }] = await tx.insert(clusters).values({ issuerCik, ...fields }).returning({ id: clusters.id });
       // The signal time is fixed at creation for return tracking (spec §4.2).
-      await tx.insert(signals).values({ clusterId, issuerCik, signalAt: new Date(d.signalAt) });
+      await tx.insert(signals).values({ clusterId, issuerCik, signalAt: new Date(d.signalAt), tags: tagsFor(d.members, d.insiderCount) });
       created++;
     }
 

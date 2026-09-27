@@ -8,7 +8,9 @@ import { loadPipelineHealth, loadSignalFacts } from '@/lib/analytics/load';
 import { AGENT_MODEL } from '@/lib/agent/models';
 import { DISPLAY_KEY, displaySchema } from '@/lib/display';
 import { COSTS_KEY, costsSchema } from '@/lib/market/costs';
+import { OFFERING_LIKE } from '@/lib/clusters/tags';
 import { getSetting } from '@/lib/settings';
+import { loadPortfolio } from '@/lib/analytics/portfolio-load';
 import { search } from '@/lib/search';
 import { applyFilters, parseFilters } from '@/lib/signals/filters';
 import { loadSignalRows } from '@/lib/signals/load';
@@ -48,6 +50,7 @@ export function createMcpServer(): McpServer {
         role: z.enum(['ceo_cfo', 'officer', 'director']).optional().describe('An insider of this kind is in the cluster'),
         status: z.enum(['active', 'closed']).optional().describe('Cluster status'),
         outcome: z.enum(['complete', 'pending']).optional().describe('Whether the 30-day outcome is complete'),
+        offering_like: z.enum(['only', 'exclude']).optional().describe('Signals whose purchases were all one day at one price (offering/conversion-like)'),
         sort: z.enum(['newest', 'agent', 'score', 'value', 'insiders']).optional(),
         limit: z.number().int().min(1).max(MAX_LIMIT).optional().describe(`Default 20, max ${MAX_LIMIT}`),
       },
@@ -66,6 +69,7 @@ export function createMcpServer(): McpServer {
         role: a.role,
         status: a.status,
         outcome: a.outcome,
+        offering: a.offering_like,
         sort: a.sort,
       };
       const [rows, display, costs] = await Promise.all([loadSignalRows(db), getSetting(db, DISPLAY_KEY, displaySchema), getSetting(db, COSTS_KEY, costsSchema)]);
@@ -90,6 +94,8 @@ export function createMcpServer(): McpServer {
           roles: r.roleMix,
           clusterStatus: r.clusterStatus,
           afterModelCutoff: r.postCutoff,
+          tags: r.tags,
+          heldOut: r.holdout,
           excess: Object.fromEntries([5, 30, 90].map((h) => [`${h}d`, round(excessAt(r, h, view))])),
         })),
       });
@@ -118,6 +124,8 @@ export function createMcpServer(): McpServer {
         benchmark: z.enum(['SPY', 'IWM']).optional(),
         net: z.boolean().optional().describe('Subtract the round-trip cost (default true)'),
         scope: z.enum(['post', 'all']).optional().describe("'post' = after the model's training cutoff (default)"),
+        hold_days: z.number().int().min(5).max(90).optional().describe('Holding period for the calendar-time portfolio (default 30 sessions)'),
+        exclude_offering_like: z.boolean().optional().describe('Leave out offering/conversion-like clusters (headline numbers only; gates always use every signal)'),
       },
       annotations: { readOnlyHint: true },
     },
@@ -131,9 +139,10 @@ export function createMcpServer(): McpServer {
       ]);
       const bench: Bench = a.benchmark ?? display.defaultBenchmark;
       const view: ViewOptions = { bench, net: a.net ?? true, scope: a.scope ?? 'post', costs };
-      const facts = all.filter((f) => inScope(f, view));
+      const facts = all.filter((f) => inScope(f, view) && !(a.exclude_offering_like && f.tags.includes(OFFERING_LIKE)));
       const gateView: ViewOptions = { bench, net: true, scope: 'post', costs };
       const gates = evaluateGates(all.filter((f) => inScope(f, gateView)), gateView, health);
+      const portfolio = await loadPortfolio(db, { signalIds: facts.filter((f) => !f.holdout).map((f) => f.id), benchmark: bench, holdDays: a.hold_days ?? GATE_HORIZON, net: view.net, costs });
       const kpis = computeKpis(facts, view, Date.now(), active.length);
       const summary = (h: number) => {
         const s = summaryAt(facts, h, view);
@@ -142,13 +151,26 @@ export function createMcpServer(): McpServer {
           : { n: s.n, insufficientData: true };
       };
       return text({
-        basis: { benchmark: bench, net: view.net, scope: view.scope, signals: facts.length, gateHorizonDays: GATE_HORIZON },
+        basis: { benchmark: bench, net: view.net, scope: view.scope, excludesOfferingLike: a.exclude_offering_like ?? false, holdout: 'held-out signals carry no outcomes and are never counted', signals: facts.length, gateHorizonDays: GATE_HORIZON },
         kpis: {
           ...kpis,
           meanExcess30d: round(kpis.meanExcess30d),
           hitRate30d: round(kpis.hitRate30d, 3),
           agentBaselineCorrelation: kpis.agentBaselineCorrelation && { r: round(kpis.agentBaselineCorrelation.r, 3), n: kpis.agentBaselineCorrelation.n },
         },
+        calendarTimePortfolio: portfolio.stats
+          ? {
+              holdDays: a.hold_days ?? GATE_HORIZON,
+              signals: portfolio.signals,
+              days: portfolio.stats.days,
+              avgSignalsHeld: round(portfolio.stats.avgHeld, 1),
+              meanDailyExcessPct: round(portfolio.stats.meanDaily, 4),
+              annualisedExcessPct: round(portfolio.stats.annualised, 1),
+              tStatNeweyWest: round(portfolio.stats.t),
+              lag: portfolio.stats.lag,
+              note: 'Equal-weight portfolio of every signal held for holdDays; robust to overlapping, correlated signals, unlike the per-signal statistics.',
+            }
+          : null,
         excessByHorizon: Object.fromEntries(HORIZONS.map((h) => [`${h}d`, summary(h)])),
         gates,
       });

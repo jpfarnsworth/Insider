@@ -193,6 +193,25 @@ There is no Row Level Security, so access control is entirely in code:
 - Connect: claude.ai custom connector at `https://insider.jpfarnsworth.com/api/mcp` with the token; or Claude Code:
   `claude mcp add --transport http insider-signals http://localhost:3040/api/mcp --header "Authorization: Bearer $(grep ^MCP_READ_TOKEN= .env.local | cut -d= -f2-)"`.
 
+## Research integrity: holdout, tags, portfolio (post-milestone-8)
+
+- **Holdout** (`lib/research/holdout.ts`, setting `holdout`, default from 2026-10-01): signals from that Chicago day on carry **no
+  outcomes** from `loadSignalFacts` (so no aggregate, tier, gate, list, CSV or MCP number can see them), and the signal page,
+  company page, insider track record and MCP `get_signal` show "held out". Reveal it in Settings once the design is frozen; that
+  save is a versioned setting change, so revealing leaves a record. Price charts on company pages still show raw prices. Any rule
+  or score tweak made after looking at post-cutoff results makes that data less out-of-sample: judge changes on the holdout.
+- **Tags** (`lib/clusters/tags.ts`, `signals.tags`): `single_day_single_price` marks clusters whose purchases were all one day at
+  one price (offering / IPO / conversion allotments). Set by `detect-clusters`; it does not change whether a signal exists. The
+  signals list, CSV, MCP and Performance can exclude them; the gates always use every signal. The rule came from looking at
+  post-cutoff results (they average far worse), so treat a better number after excluding them as a hypothesis until the holdout confirms it.
+- **Calendar-time portfolio** (`lib/analytics/portfolio.ts`, `portfolio-load.ts`): every signal held equal-weight for N sessions from
+  its entry open; daily excess vs benchmark; t-stat with Newey-West errors. This is the honest test, because per-signal statistics
+  treat overlapping, same-week signals as independent. Note it weights each *day* equally, so sparse early periods count more than
+  per-signal averages do; the two can differ. Its per-signal return math reproduces `signal_outcomes` exactly.
+- **Dollar volume**: `signals.avg_dollar_volume` picks the cost tier and unknown counts as thin (1.0%). It was found empty for 96%
+  of signals (stale until `compute-outcomes` re-ran), overstating costs. `/system` now shows how many signals lack it; run compute-outcomes if it is high.
+- Gemini: the request has no `tools` (no Search grounding); the model's documented cutoff is January 2025 (`lib/agent/models.ts`).
+
 ## Rules that are easy to get wrong
 
 - **Timing:** all return math keys off the filing's **acceptance datetime** (`filings.accepted_at`), not the

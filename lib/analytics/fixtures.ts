@@ -30,6 +30,8 @@ export function fact(o: Partial<SignalFact> & { excess?: number; iwmExcess?: num
     postCutoff: true,
     avgDollarVolume: 5_000_000,
     status: 'active',
+    tags: [],
+    holdout: false,
     outcomes: { 30: { SPY: out({ excessPct: excess, status: outcomeStatus }), IWM: out({ excessPct: iwmExcess, status: outcomeStatus }) } },
     ...rest,
   };

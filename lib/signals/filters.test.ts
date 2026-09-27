@@ -21,7 +21,7 @@ describe('parseFilters', () => {
   });
 
   it('round-trips through toQuery', () => {
-    const filters = f({ q: 'ab', from: '2026-01-01', baselineMin: 40, agentMin: 70, role: 'officer', status: 'active', sort: 'value' });
+    const filters = f({ q: 'ab', from: '2026-01-01', baselineMin: 40, agentMin: 70, role: 'officer', status: 'active', offering: 'exclude', sort: 'value' });
     expect(parseFilters(Object.fromEntries(new URLSearchParams(toQuery(filters))))).toEqual(filters);
     expect(toQuery(EMPTY_FILTERS)).toBe('');
   });
@@ -52,6 +52,15 @@ describe('matches', () => {
     expect(matches(row({ roleMix: 'ceo_cfo' }), f({ role: 'officer' }))).toBe(true);
     expect(matches(row({ roleMix: 'other_officer' }), f({ role: 'ceo_cfo' }))).toBe(false);
     expect(matches(row({ roleMix: 'director' }), f({ role: 'director' }))).toBe(true);
+  });
+
+  it('offering-like tag: only / exclude', () => {
+    const tagged = row({ tags: ['single_day_single_price'] });
+    expect(matches(tagged, f({ offering: 'only' }))).toBe(true);
+    expect(matches(tagged, f({ offering: 'exclude' }))).toBe(false);
+    expect(matches(row({}), f({ offering: 'only' }))).toBe(false);
+    expect(matches(row({}), f({ offering: 'exclude' }))).toBe(true);
+    expect(matches(tagged, f({}))).toBe(true);
   });
 
   it('cluster status, conviction and outcome availability', () => {

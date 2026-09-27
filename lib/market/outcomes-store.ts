@@ -48,6 +48,8 @@ export interface OutcomeStats {
   signals: number;
   rowsWritten: number;
   dataEnded: number;
+  /** Signals with an entry date but no average dollar volume: they get the thin-name cost by default, which understates net returns. */
+  missingVolume: number;
   asOf: string | null;
 }
 
@@ -60,7 +62,7 @@ export async function computeAndStoreOutcomes(db: Db): Promise<OutcomeStats> {
   const [days, bench] = await Promise.all([loadCalendar(db), loadBars(db, [...BENCHMARKS])]);
   const spy = bench.get('SPY')?.adj ?? [];
   const asOf = spy.at(-1)?.date ?? null;
-  const stats: OutcomeStats = { signals: 0, rowsWritten: 0, dataEnded: 0, asOf };
+  const stats: OutcomeStats = { signals: 0, rowsWritten: 0, dataEnded: 0, missingVolume: 0, asOf };
   if (!asOf || !days.length) return stats;
 
   const benchmarks = Object.fromEntries(BENCHMARKS.map((b) => [b, bench.get(b)?.adj ?? []]));
@@ -133,6 +135,7 @@ export async function computeAndStoreOutcomes(db: Db): Promise<OutcomeStats> {
         ? averageDollarVolume((own?.liquidity ?? []).filter((b) => b.date < result.entryDate!).slice(-VOLUME_SESSIONS))
         : null;
       const avgDollarVolume = dv === null ? null : dv.toFixed(2);
+      if (result.entryDate && dv === null) stats.missingVolume++;
       if (s.entryDate !== result.entryDate || s.entryPrice !== entryPrice || s.status !== status || !same(s.avgDollarVolume, avgDollarVolume)) {
         await db.update(signals).set({ entryDate: result.entryDate, entryPrice, status, avgDollarVolume }).where(and(eq(signals.id, s.id)));
       }

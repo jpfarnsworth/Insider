@@ -1,5 +1,6 @@
 import { asc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '@/lib/db';
+import { isHeldOut, loadHoldoutFrom } from '@/lib/research/holdout';
 import { priceBars, signalOutcomes } from '@/db/schema';
 import { getSetting } from '@/lib/settings';
 import { buildChart, type ChartData } from './chart';
@@ -24,6 +25,8 @@ export interface SignalPerformance {
   horizons: HorizonRow[];
   costPct: number;
   chart: ChartData | null;
+  /** Set (to the holdout start date) when this signal is in the holdout window: returns and chart are withheld. */
+  heldOutFrom: string | null;
 }
 
 const num = (v: string | null) => (v === null ? null : Number(v));
@@ -31,8 +34,11 @@ const num = (v: string | null) => (v === null ? null : Number(v));
 /** Forward returns (gross and net of costs) and the price chart for one signal. */
 export async function loadSignalPerformance(
   db: Db,
-  signal: { id: string; ticker: string | null; entryDate: string | null },
+  signal: { id: string; ticker: string | null; entryDate: string | null; signalAt: Date },
 ): Promise<SignalPerformance> {
+  const from = await loadHoldoutFrom(db);
+  if (isHeldOut(signal.signalAt.getTime(), from)) return { horizons: [], costPct: 0, chart: null, heldOutFrom: from };
+
   const [rows, costs] = await Promise.all([
     db.select().from(signalOutcomes).where(eq(signalOutcomes.signalId, signal.id)).orderBy(asc(signalOutcomes.horizonDays)),
     getSetting(db, COSTS_KEY, costsSchema),
@@ -78,7 +84,7 @@ export async function loadSignalPerformance(
     ? buildChart(toAdjBars(stock), toAdjBars(spyRows.map(numeric)), signal.entryDate)
     : null;
 
-  return { horizons: [...byHorizon.values()], costPct, chart };
+  return { horizons: [...byHorizon.values()], costPct, chart, heldOutFrom: null };
 }
 
 

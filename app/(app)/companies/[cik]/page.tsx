@@ -1,3 +1,4 @@
+import { isHeldOut, loadHoldoutFrom } from '@/lib/research/holdout';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { and, asc, desc, eq, gte, sql } from 'drizzle-orm';
@@ -40,6 +41,7 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
   const [issuer] = await db.select().from(issuers).where(eq(issuers.cik, cik)).limit(1);
   if (!issuer) notFound();
 
+  const heldFrom = await loadHoldoutFrom(db);
   const yearAgo = new Date(nowMs() - 365 * 86_400_000).toISOString().slice(0, 10);
 
   const [bars, trades, txns, roster, sigs] = await Promise.all([
@@ -175,7 +177,7 @@ export default async function CompanyPage({ params, searchParams }: { params: Pr
                       <td className="px-4 py-2.5 text-right font-mono tabular-nums">{formatUsd(s.totalValue)}</td>
                       <td className="px-4 py-2.5 text-right"><ScoreBadge score={s.baseline} /></td>
                       <td className="px-4 py-2.5 text-right"><ScoreBadge score={s.agent} /></td>
-                      <td className={cn('px-4 py-2.5 text-right font-mono tabular-nums', s.excess30 !== null && (Number(s.excess30) > 0 ? 'text-positive' : Number(s.excess30) < 0 ? 'text-negative' : ''))}>{s.excess30 === null ? '—' : formatPct(Number(s.excess30))}</td>
+                      <td className={cn('px-4 py-2.5 text-right font-mono tabular-nums', s.excess30 !== null && (Number(s.excess30) > 0 ? 'text-positive' : Number(s.excess30) < 0 ? 'text-negative' : ''))}>{isHeldOut(s.signalAt.getTime(), heldFrom) ? 'held out' : s.excess30 === null ? '—' : formatPct(Number(s.excess30))}</td>
                       <td className="px-4 py-2.5"><Badge variant={s.status === 'active' ? 'secondary' : 'outline'}>{s.status === 'active' ? 'Active' : 'Closed'}</Badge></td>
                     </tr>
                   ))}

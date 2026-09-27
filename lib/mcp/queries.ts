@@ -1,5 +1,6 @@
 import { asc, eq, sql } from 'drizzle-orm';
 import type { Db } from '@/lib/db';
+import { isHeldOut, loadHoldoutFrom } from '@/lib/research/holdout';
 import { agentEvaluations, clusterTransactions, clusters, filings, insiders, issuers, signalOutcomes, signals, transactions } from '@/db/schema';
 
 const num = (v: string | null) => (v === null ? null : Number(v));
@@ -13,6 +14,7 @@ export async function getSignalDetail(db: Db, id: string) {
       status: signals.status,
       entryDate: signals.entryDate,
       entryPrice: signals.entryPrice,
+      tags: signals.tags,
       baselineScore: signals.baselineScore,
       baselineVersion: signals.baselineVersion,
       baselineBreakdown: signals.baselineBreakdown,
@@ -41,6 +43,8 @@ export async function getSignalDetail(db: Db, id: string) {
     .limit(1);
   if (!s) return null;
 
+  const heldFrom = await loadHoldoutFrom(db);
+  const held = isHeldOut(s.signalAt.getTime(), heldFrom);
   const [purchases, outcomes] = await Promise.all([
     db
       .select({
@@ -60,7 +64,7 @@ export async function getSignalDetail(db: Db, id: string) {
       .innerJoin(filings, eq(filings.id, transactions.filingId))
       .where(eq(clusterTransactions.clusterId, s.clusterId))
       .orderBy(asc(filings.acceptedAt), asc(transactions.transactionDate)),
-    db.select().from(signalOutcomes).where(eq(signalOutcomes.signalId, s.id)).orderBy(asc(signalOutcomes.horizonDays), asc(signalOutcomes.benchmarkTicker)),
+    held ? Promise.resolve([]) : db.select().from(signalOutcomes).where(eq(signalOutcomes.signalId, s.id)).orderBy(asc(signalOutcomes.horizonDays), asc(signalOutcomes.benchmarkTicker)),
   ]);
 
   return {
@@ -68,6 +72,7 @@ export async function getSignalDetail(db: Db, id: string) {
     company: { cik: s.issuerCik, ticker: s.ticker, name: s.issuer },
     signalAt: s.signalAt.toISOString(),
     signalStatus: s.status,
+    tags: s.tags,
     entry: { date: s.entryDate, price: num(s.entryPrice) },
     cluster: {
       status: s.clusterStatus,
@@ -90,6 +95,7 @@ export async function getSignalDetail(db: Db, id: string) {
       sharesOwnedAfter: num(p.sharesOwnedAfter),
       is10b5_1: p.is10b5_1,
     })),
+    holdout: held ? `Held out from ${heldFrom}: outcomes are withheld until the holdout is lifted in Settings.` : null,
     outcomes: outcomes.map((o) => ({
       horizonDays: o.horizonDays,
       benchmark: o.benchmarkTicker,

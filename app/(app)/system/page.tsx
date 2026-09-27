@@ -1,6 +1,6 @@
 import { desc, eq, getTableColumns, sql } from 'drizzle-orm';
 import { db } from '@/lib/db';
-import { filings, issuers, jobRuns } from '@/db/schema';
+import { filings, issuers, jobRuns, signals } from '@/db/schema';
 import { requireUser } from '@/lib/auth/require-user';
 import { formatDateTime, formatDuration, formatNumber } from '@/lib/format';
 import { estimateCostUsd } from '@/lib/agent/models';
@@ -36,6 +36,8 @@ export default async function SystemPage() {
         filings: sql<number>`count(*)::int`,
         failed: sql<number>`count(*) filter (where ${filings.parseStatus} = 'failed')::int`,
         latest: sql<Date | null>`max(${filings.acceptedAt})`,
+        missingVolume: sql<number>`(select count(*)::int from ${signals} where entry_date is not null and avg_dollar_volume is null)`,
+        signalCount: sql<number>`(select count(*)::int from ${signals})`,
         unmapped: sql<number>`(select count(*)::int from ${issuers} i where i.ticker is null and exists (select 1 from ${filings} f where f.issuer_cik = i.cik))`,
       })
       .from(filings),
@@ -104,12 +106,13 @@ export default async function SystemPage() {
         <h2 id="quality" className="mb-3 text-lg font-semibold">
           Data quality
         </h2>
-        <dl className="grid gap-4 sm:grid-cols-4">
+        <dl className="grid gap-4 sm:grid-cols-3">
           {[
             ['Filings stored', stats.filings.toLocaleString()],
             ['Parse failures', `${stats.failed.toLocaleString()} (${failureRate.toFixed(2)}%)`],
             ['Latest acceptance', stats.latest ? `${formatDateTime(new Date(stats.latest))} CT` : '—'],
             ['Issuers without ticker', stats.unmapped.toLocaleString()],
+            ['Signals missing dollar volume', `${stats.missingVolume.toLocaleString()} of ${stats.signalCount.toLocaleString()}${stats.signalCount && stats.missingVolume / stats.signalCount > 0.05 ? ' - too many: net returns use the thin-name cost for these. Run compute-outcomes.' : ''}`],
           ].map(([label, value]) => (
             <div key={label} className="rounded-lg border p-3">
               <dt className="text-muted-foreground text-xs">{label}</dt>

@@ -1,3 +1,4 @@
+import { isHeldOut, loadHoldoutFrom } from '@/lib/research/holdout';
 import Link from 'next/link';
 import { and, desc, eq, gte, lte, ne, sql } from 'drizzle-orm';
 import { db } from '@/lib/db';
@@ -16,6 +17,7 @@ const YEAR_MS = 365 * 86_400_000;
  */
 export async function Context({ signalId, issuerCik, signalAt, latestEvalId }: { signalId: string; issuerCik: string; signalAt: Date; latestEvalId: string | null }) {
   const since = new Date(signalAt.getTime() - YEAR_MS).toISOString().slice(0, 10);
+  const heldFrom = await loadHoldoutFrom(db);
 
   const [prior, [selling], evaluation] = await Promise.all([
     db
@@ -91,7 +93,7 @@ export async function Context({ signalId, issuerCik, signalAt, latestEvalId }: {
                     className={cn('font-mono text-xs tabular-nums', p.excess30 !== null && (Number(p.excess30) > 0 ? 'text-positive' : Number(p.excess30) < 0 ? 'text-negative' : ''))}
                     title="30-day excess return vs SPY"
                   >
-                    {p.excess30 === null ? 'pending' : formatPct(Number(p.excess30))}
+                    {isHeldOut(p.signalAt.getTime(), heldFrom) ? 'held out' : p.excess30 === null ? 'pending' : formatPct(Number(p.excess30))}
                   </span>
                 </li>
               ))}

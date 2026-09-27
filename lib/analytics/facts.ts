@@ -34,6 +34,10 @@ export interface SignalFact {
   postCutoff: boolean;
   avgDollarVolume: number | null;
   status: 'active' | 'amended' | 'data_ended';
+  /** Descriptive tags (see lib/clusters/tags.ts), e.g. 'single_day_single_price'. */
+  tags: string[];
+  /** In the holdout window: its outcomes are withheld (empty) until the freeze is lifted. */
+  holdout: boolean;
   /** horizon (trading days) -> benchmark -> outcome. */
   outcomes: Record<number, Partial<Record<Bench, OutcomeFact>>>;
 }

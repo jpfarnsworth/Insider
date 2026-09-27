@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '@/lib/db';
 import { filings, insiders, issuers, priceBars, transactions } from '@/db/schema';
+import { isHeldOut, loadHoldoutFrom } from '@/lib/research/holdout';
 import { loadCalendar, toAlpacaSymbol } from './store';
 import { computeOutcomes } from './outcomes';
 import { toAdjBars } from './returns';
@@ -15,9 +16,9 @@ export interface PurchaseOutcome {
   price: number;
   value: number;
   filingUrl: string;
-  status30: 'pending' | 'complete' | 'data_ended' | 'no_prices';
+  status30: 'pending' | 'complete' | 'data_ended' | 'no_prices' | 'held_out';
   excess30: number | null;
-  status90: 'pending' | 'complete' | 'data_ended' | 'no_prices';
+  status90: 'pending' | 'complete' | 'data_ended' | 'no_prices' | 'held_out';
   excess90: number | null;
 }
 
@@ -47,6 +48,7 @@ export async function loadInsiderTrackRecord(db: Db, insiderCik: string): Promis
     .orderBy(desc(transactions.transactionDate))
     .limit(200);
   if (!purchases.length) return [];
+  const heldFrom = await loadHoldoutFrom(db);
 
   const symbols = [...new Set([...purchases.flatMap((p) => (p.ticker ? [toAlpacaSymbol(p.ticker)] : [])), 'SPY'])];
   const [days, rows] = await Promise.all([loadCalendar(db), db.select().from(priceBars).where(inArray(priceBars.ticker, symbols)).orderBy(asc(priceBars.date))]);
@@ -70,6 +72,8 @@ export async function loadInsiderTrackRecord(db: Db, insiderCik: string): Promis
       value: Number(p.value),
       filingUrl: p.url,
     };
+    // Purchases in the holdout window carry no returns until the freeze is lifted.
+    if (isHeldOut(p.acceptedAt.getTime(), heldFrom)) return { ...base, status30: 'held_out', excess30: null, status90: 'held_out', excess90: null } as PurchaseOutcome;
     const stock = p.ticker ? adj(toAlpacaSymbol(p.ticker)) : [];
     if (!stock.length || !asOf || !days.length) return { ...base, status30: 'no_prices', excess30: null, status90: 'no_prices', excess90: null } as PurchaseOutcome;
 

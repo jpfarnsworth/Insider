@@ -1,4 +1,5 @@
 import type { Conviction, SignalFact } from '@/lib/analytics/facts';
+import { OFFERING_LIKE } from '@/lib/clusters/tags';
 
 // Signals-list filters (spec §9.3). The same query string drives the page, the CSV export and
 // saved presets, so parsing and serialising live here and are shared.
@@ -14,6 +15,8 @@ export const ROLE_LABELS: Record<RoleFilter, string> = { ceo_cfo: 'CEO or CFO', 
 
 export type ClusterStatus = 'active' | 'closed';
 export type OutcomeFilter = 'complete' | 'pending';
+/** Offering-like buys (lib/clusters/tags.ts): keep only them, or leave them out. */
+export type OfferingFilter = 'only' | 'exclude';
 
 /** A list row: the analytics fact plus the cluster's own status. */
 export interface SignalRow extends SignalFact {
@@ -34,6 +37,7 @@ export interface SignalFilters {
   status: ClusterStatus | null;
   /** Whether the 30-day outcome is complete. */
   outcome: OutcomeFilter | null;
+  offering: OfferingFilter | null;
   sort: SortKey;
 }
 
@@ -49,6 +53,7 @@ export const EMPTY_FILTERS: SignalFilters = {
   role: null,
   status: null,
   outcome: null,
+  offering: null,
   sort: 'newest',
 };
 
@@ -77,6 +82,7 @@ export function parseFilters(params: Params): SignalFilters {
     role: oneOf(get('role'), ['ceo_cfo', 'officer', 'director'] as const),
     status: oneOf(get('status'), ['active', 'closed'] as const),
     outcome: oneOf(get('outcome'), ['complete', 'pending'] as const),
+    offering: oneOf(get('offering'), ['only', 'exclude'] as const),
     sort: oneOf(get('sort'), ['newest', 'agent', 'score', 'value', 'insiders'] as const) ?? 'newest',
   };
 }
@@ -96,6 +102,7 @@ export function toQuery(f: SignalFilters): string {
   put('role', f.role);
   put('status', f.status);
   put('outcome', f.outcome);
+  put('offering', f.offering);
   if (f.sort !== 'newest') p.set('sort', f.sort);
   return p.toString();
 }
@@ -129,6 +136,9 @@ export function matches(r: SignalRow, f: SignalFilters): boolean {
   if (f.status && r.clusterStatus !== f.status) return false;
   if (f.outcome === 'complete' && !hasCompleteOutcome(r)) return false;
   if (f.outcome === 'pending' && hasCompleteOutcome(r)) return false;
+  const offering = r.tags.includes(OFFERING_LIKE);
+  if (f.offering === 'only' && !offering) return false;
+  if (f.offering === 'exclude' && offering) return false;
   return true;
 }
 

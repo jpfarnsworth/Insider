@@ -17,10 +17,23 @@ function Return({ v }: { v: number | null }) {
 export async function Performance({
   signal,
 }: {
-  signal: { id: string; ticker: string | null; entryDate: string | null; entryPrice: string | null; status: string };
+  signal: { id: string; ticker: string | null; entryDate: string | null; entryPrice: string | null; status: string; signalAt: Date };
 }) {
   const perf = await loadSignalPerformance(db, signal);
   const anyMatured = perf.horizons.some((h) => h.status !== 'pending');
+
+  if (perf.heldOutFrom) {
+    return (
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Performance vs benchmarks</CardTitle>
+          <CardDescription>
+            Held out. Signals from {formatDay(perf.heldOutFrom)} on are the untouched test window: their returns and price path stay hidden until you lift the holdout in Settings.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
 
   return (
     <Card className="mb-6">

@@ -15,6 +15,7 @@ import { COSTS_KEY, costsSchema } from '@/lib/market/costs';
 import { sendTelegram, telegramConfigured } from '@/lib/notify/telegram';
 import { NOTIFICATIONS_KEY, notificationsSchema } from '@/lib/notify/settings';
 import { BASELINE_WEIGHTS_KEY, baselineWeightsSchema } from '@/lib/scoring/baseline';
+import { HOLDOUT_KEY, holdoutSchema } from '@/lib/research/holdout';
 import { saveSetting } from '@/lib/settings';
 import type { FormState } from './state';
 
@@ -110,3 +111,14 @@ export async function notificationsAction(_prev: FormState, fd: FormData): Promi
   ).then((s) => (s.status === 'ok' && s.message === 'No changes to save.' && flagRes.changed ? { ...s, message: 'Saved.' } : s));
 }
 
+
+/** Saves the holdout start date and whether it is revealed. Revealing is a versioned change, so it leaves a record. */
+export async function holdoutAction(_prev: FormState, fd: FormData): Promise<FormState> {
+  await requireUser();
+  return save(
+    HOLDOUT_KEY,
+    holdoutSchema,
+    { from: String(fd.get('from') ?? ''), reveal: checked(fd, 'reveal') },
+    (v) => `Saved as revision ${v}. Every page, export and MCP tool follows it.`,
+  );
+}
