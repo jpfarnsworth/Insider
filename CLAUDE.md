@@ -66,7 +66,7 @@ per IP (`lib/auth/rate-limit.ts`, in-memory).
 There is no Row Level Security, so access control is entirely in code:
 
 - `proxy.ts` (Next 16's middleware) only checks that a session cookie *exists*. It is not proof of a valid session.
-- `requireUser()` (`lib/auth/require-user.ts`) is the real check. Call it in **every** page, route handler, server
+- `requireUser()` (`lib/auth/require-user.ts`) is the real check. Call it in **every** page, route handler (except `/api/mcp`, which uses its bearer token), server
   action and data-access function. Layouts do not re-run on client navigation, so the layout check is not enough.
 
 ## Ingestion (verified against live EDGAR)
@@ -179,6 +179,19 @@ There is no Row Level Security, so access control is entirely in code:
   (`signals.alerted_at`) when the baseline or agent score reaches the threshold, only for signals under 3 days old so enabling
   it never replays history. Messages are HTML-escaped; errors never include the bot token.
 - The dashboard still compares against SPY; the default-benchmark setting drives Performance and the signals list.
+
+## MCP server (Phase 2 groundwork)
+
+- `/api/mcp` (`app/api/mcp/route.ts`) is a read-only MCP server over HTTP, built like the Life OS one: stateless (fresh
+  `McpServer` + transport per request), open CORS for claude.ai's connector, bearer token `MCP_READ_TOKEN` (>= 32 chars,
+  constant-time compare, closed if unset). `proxy.ts` lets `/api/mcp` through, so the route's own `checkMcpAuth` is the access
+  check: the one deliberate exception to "requireUser everywhere". Every request is logged to `mcp_request_logs` (no arguments).
+- Tools (`lib/mcp/tools.ts`): `list_signals`, `get_signal`, `get_performance`, `search`, `pipeline_status`. Thin adapters over
+  `lib/signals`, `lib/analytics`, `lib/search` and `lib/mcp/queries.ts`, so numbers match the UI. Filing and agent text is
+  untrusted and the tool descriptions say so.
+- Phase 2 trading tools must not go on this token: add a separate `MCP_READWRITE_TOKEN` with its own scope check, as Life OS does.
+- Connect: claude.ai custom connector at `https://insider.jpfarnsworth.com/api/mcp` with the token; or Claude Code:
+  `claude mcp add --transport http insider-signals http://localhost:3040/api/mcp --header "Authorization: Bearer $(grep ^MCP_READ_TOKEN= .env.local | cut -d= -f2-)"`.
 
 ## Rules that are easy to get wrong
 

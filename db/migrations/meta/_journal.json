@@ -43,6 +43,13 @@
       "when": 1790472398233,
       "tag": "0005_shiny_absorbing_man",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790475545924,
+      "tag": "0006_huge_justice",
+      "breakpoints": true
     }
   ]
 }

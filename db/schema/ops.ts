@@ -95,3 +95,17 @@ export const savedFilters = pgTable('saved_filters', {
   params: text('params').notNull(),
   ...timestamps,
 });
+
+// One row per request to /api/mcp (spec Phase 2 groundwork). No arguments or results are stored.
+export const mcpRequestLogs = pgTable(
+  'mcp_request_logs',
+  {
+    id: id(),
+    method: text('method').notNull(),
+    tool: text('tool'),
+    authOutcome: text('auth_outcome', { enum: ['ok', 'missing_token', 'invalid_token', 'insufficient_scope'] }).notNull(),
+    statusCode: integer('status_code').notNull(),
+    ...timestamps,
+  },
+  (t) => [index('mcp_request_logs_created_at_idx').on(t.createdAt)],
+);

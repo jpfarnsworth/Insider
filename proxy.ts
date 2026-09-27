@@ -9,7 +9,8 @@ const SESSION_COOKIES = ['authjs.session-token', '__Secure-authjs.session-token'
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  if (pathname.startsWith('/sign-in') || pathname.startsWith('/api/auth')) {
+  // /api/mcp is called by an MCP client with a bearer token, not a browser session; the route checks it.
+  if (pathname.startsWith('/sign-in') || pathname.startsWith('/api/auth') || pathname.startsWith('/api/mcp')) {
     return NextResponse.next();
   }
 
