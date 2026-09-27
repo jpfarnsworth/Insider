@@ -28,49 +28,22 @@ describe('gate 1: enough complete 30-day outcomes', () => {
   });
 });
 
-describe('gate 2: top tier has positive net excess', () => {
-  it('passes when the top tier has enough signals and a positive net mean', () => {
-    const facts = [...many(25, { baseline: 90, excess: 4 }), ...many(50, { baseline: 40, excess: -3 })];
-    expect(gate(facts, healthy, 2)).toMatchObject({ status: 'pass' });
-  });
-
-  it('fails when the top tier is net negative, even though gross is positive', () => {
-    // gross +0.2 minus the 0.3 cost = -0.1
-    const facts = [...many(25, { baseline: 90, excess: 0.2 }), ...many(50, { baseline: 40, excess: 1 })];
-    expect(gate(facts, healthy, 2).status).toBe('fail');
-  });
-
-  it('is insufficient below 20 top-tier signals', () => {
-    // 45 signals: the top third is 15.
-    const g = gate([...many(9, { baseline: 90, excess: 9 }), ...many(36, { baseline: 40 })], healthy, 2);
-    expect(g.status).toBe('insufficient');
-    expect(g.detail).toContain('n=15');
-  });
-
-  it('counts agent >= 70 signals in the top tier even with a low baseline', () => {
-    // Baseline top third of 28 is 10 signals (3 strong-baseline + 7 agent ones); the union adds all 25 agent-tier signals.
-    const g = gate([...many(25, { baseline: 30, agent: 80, excess: 6 }), ...many(3, { baseline: 90, agent: 60, excess: 2 })], healthy, 2);
-    expect(g.detail).toContain('n=28');
-    expect(g.status).toBe('pass');
-  });
-});
-
 const WEEK = 7 * 86_400_000;
 
 /**
- * n signals spread over `weeks` weeks, all in the holdout window. The agent's score follows the excess
- * return with strength `edge`; the baseline's is unrelated noise (or follows it with `baselineEdge`).
+ * n holdout-window signals over `weeks` weeks. `mean` shifts every return; agentEdge / baselineEdge make each
+ * scorer's score follow the return (so it out-ranks the other).
  */
-function holdoutSet(n: number, weeks: number, edge: number, baselineEdge = 0, o: { frozen?: boolean } = {}): SignalFact[] {
+function holdoutSet(n: number, weeks: number, o: { mean?: number; agentEdge?: number; baselineEdge?: number; frozen?: boolean } = {}): SignalFact[] {
   let a = 12345;
   const rand = () => ((a = (a * 1664525 + 1013904223) % 4294967296) / 4294967296);
   return Array.from({ length: n }, (_, i) => {
-    const excess = (rand() - 0.5) * 20;
+    const excess = (o.mean ?? 0) + (rand() - 0.5) * 20;
     return fact({
-      signalAt: Date.UTC(2026, 9, 1) + (i % weeks) * WEEK,
-      excess: excess + 0.3, // gross; the view is net, which subtracts the cost
-      agentScore: Math.round(50 + edge * excess + (rand() - 0.5) * 20),
-      baselineScore: 50 + baselineEdge * excess + (rand() - 0.5) * 60,
+      signalAt: Date.UTC(2026, 9, 1) + (i % weeks) * WEEK + i * 1000,
+      excess: excess + 0.3, // gross; the view is net, which subtracts the round-trip cost
+      agentScore: Math.round(50 + (o.agentEdge ?? 0) * excess + (rand() - 0.5) * 20),
+      baselineScore: 50 + (o.baselineEdge ?? 0) * excess + (rand() - 0.5) * 60,
       holdoutWindow: true,
       holdout: o.frozen ?? false,
       ...(o.frozen ? { outcomes: {} } : {}),
@@ -78,62 +51,52 @@ function holdoutSet(n: number, weeks: number, edge: number, baselineEdge = 0, o:
   });
 }
 
-describe('gate 3: agent versus baseline (top third by each rank, weekly-block bootstrap)', () => {
-  it('is insufficient, and says the interim is not evidence, until the holdout has enough signals', () => {
-    const design = [...many(30, { baseline: 90, agent: 60, excess: 3 }), ...many(30, { baseline: 40, agent: 80, excess: 5 })];
-    const g = evaluateGates(design, view, healthy, { holdoutFrom: '2026-10-01' })[2];
+const withHoldout = (facts: SignalFact[], id: 1 | 2 | 3 | 4) => evaluateGates(facts, view, healthy, { holdoutFrom: '2026-10-01' }).find((g) => g.id === id)!;
+
+describe('gate 2: pre-registered H1, judged on the holdout', () => {
+  it('waits for the holdout, and shows the design set as not evidence', () => {
+    const design = [...many(60, { baseline: 90, agent: 60, excess: 6 })];
+    const g = withHoldout(design, 2);
     expect(g.status).toBe('insufficient');
-    expect(g.detail).toContain('awaits the holdout');
+    expect(g.detail).toContain('Awaiting the holdout (signals from 2026-10-01)');
     expect(g.detail).toContain('NOT evidence');
   });
 
-  it('names the holdout start date while waiting', () => {
-    const g = evaluateGates(many(60, { baseline: 50, agent: 60 }), view, healthy, { holdoutFrom: '2026-10-01' })[2];
-    expect(g.detail).toContain('signals from 2026-10-01');
+  it('stays insufficient while the holdout is frozen (outcomes withheld)', () => {
+    expect(withHoldout(holdoutSet(200, 25, { mean: 5, frozen: true }), 2).status).toBe('insufficient');
   });
 
-  it('stays insufficient while the holdout is frozen (its outcomes are withheld)', () => {
-    const g = evaluateGates(holdoutSet(120, 15, 2, 0, { frozen: true }), view, healthy, { holdoutFrom: '2026-10-01' })[2];
-    expect(g.status).toBe('insufficient');
-    expect(g.detail).toContain('120 so far, 0 with complete outcomes');
-  });
-
-  it('keeps the agent when its top third beats the baseline top third with 95% confidence', () => {
-    const g = gate(holdoutSet(240, 30, 3), healthy, 3);
-    expect(g.status).toBe('pass'); // decided by the data
-    expect(g.detail).toMatch(/^Keep the agent/);
-    expect(g.detail).toContain('weekly-block bootstrap');
-    expect(g.detail).toContain('Rank correlation');
-  });
-
-  it('drops the agent when there is no distinguishable difference: the burden of proof is on it', () => {
-    const g = gate(holdoutSet(240, 30, 0), healthy, 3);
+  it('passes on the holdout when the top tier is clearly positive net of costs', () => {
+    const g = withHoldout(holdoutSet(200, 25, { mean: 4, agentEdge: 1, baselineEdge: 1 }), 2);
     expect(g.status).toBe('pass');
-    expect(g.detail).toMatch(/^Drop the agent/);
+    expect(g.detail).toContain('Holdout: top tier');
   });
 
-  it('drops the agent when the baseline is clearly ahead', () => {
-    const g = gate(holdoutSet(240, 30, 0, 3), healthy, 3);
-    expect(g.detail).toMatch(/^Drop the agent: the baseline tier is ahead/);
+  it('fails when the holdout top tier is not positive, whatever the design set did', () => {
+    const facts = [...many(60, { baseline: 90, agent: 60, excess: 8 }), ...holdoutSet(200, 25, { mean: 0 })];
+    expect(withHoldout(facts, 2).status).toBe('fail');
   });
 });
 
-describe('gate 2 compares like with like', () => {
-  it('ignores signals the agent has not scored, so a partial batch cannot skew the tier', () => {
-    const scoredBaseline = many(25, { baseline: 90, agent: 60, excess: 5 });
-    const scoredAgent = many(25, { baseline: 40, agent: 80, excess: 3 });
-    const filler = many(20, { baseline: 40, agent: 55, excess: 1 });
-    // 30 unscored baseline-strong signals that did badly must not drag the tier down.
-    const unscored = many(30, { baseline: 95, agent: null, excess: -10 });
-    const g = gate([...scoredBaseline, ...scoredAgent, ...filler, ...unscored], healthy, 2);
-    expect(g.detail).toContain('[on 70 signals scored by both]');
+describe('gate 3: the agent is not promoted by default', () => {
+  it('resolves to "not promoted" while the registered test is pending, and never blocks Phase 2', () => {
+    const g = withHoldout([...many(60, { baseline: 90, agent: 60, excess: 3 })], 3);
     expect(g.status).toBe('pass');
+    expect(g.detail).toMatch(/^Not promoted \(default\)/);
+    expect(g.detail).toContain('shadow scorer');
+    expect(g.detail).toContain('NOT evidence');
+    expect(g.detail).toContain(`n=${300}`);
   });
 
-  it('falls back to every signal while the agent has scored none', () => {
-    const g = gate([...many(30, { baseline: 90, agent: null, excess: 4 }), ...many(30, { baseline: 40, agent: null, excess: 1 })], healthy, 2);
+  it('promotes the agent only when it clearly out-ranks the baseline on the holdout (n=300)', () => {
+    const g = withHoldout(holdoutSet(400, 40, { agentEdge: 4, baselineEdge: 0 }), 3);
     expect(g.status).toBe('pass');
-    expect(g.detail).not.toContain('scored by both');
+    expect(g.detail).toMatch(/^Promote the agent/);
+  });
+
+  it('is not promoted when there is no difference, or the baseline out-ranks it', () => {
+    expect(withHoldout(holdoutSet(400, 40), 3).detail).toMatch(/^Not promoted: holdout/);
+    expect(withHoldout(holdoutSet(400, 40, { baselineEdge: 4 }), 3).detail).toMatch(/^Not promoted: holdout/);
   });
 });
 
@@ -167,8 +130,8 @@ describe('gate 4: pipeline health', () => {
 });
 
 describe('allGatesPass', () => {
-  it('needs every gate to pass', () => {
-    const facts = [...many(30, { baseline: 90, agent: 60, excess: 4 }), ...many(30, { baseline: 40, agent: 80, excess: 6 }), ...many(20, { baseline: 40, agent: 60, excess: 1 }), ...holdoutSet(240, 30, 3)];
+  it('needs every gate to pass; gate 3 always resolves so it never blocks', () => {
+    const facts = [...many(60, { baseline: 90, agent: 60, excess: 4 }), ...holdoutSet(240, 30, { mean: 4, agentEdge: 1, baselineEdge: 1 })];
     const gates = evaluateGates(facts, view, healthy);
     expect(gates.map((x) => x.status)).toEqual(['pass', 'pass', 'pass', 'pass']);
     expect(allGatesPass(gates)).toBe(true);

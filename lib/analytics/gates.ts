@@ -1,12 +1,14 @@
 import type { SignalFact, ViewOptions } from './facts';
-import { headToHead, GATE3_MIN_TIER, type HeadToHead, type Paired } from './head-to-head';
-import { excessAt, excessValues, tiersFor } from './facts';
-import { MIN_N, summarize, type Summary } from './stats';
-
-const WEEK_MS = 7 * 86_400_000;
+import { excessValues } from './facts';
+import { headToHead } from './head-to-head';
+import { PREREG, evaluatePrereg, interimPrereg, type PreregResult } from './prereg';
 
 // Spec §11: paper trading is built only when ALL of these pass, on post-model-cutoff signals,
 // net of costs. "Insufficient" means the data has not accumulated yet, which is not a failure.
+//
+// Gates 2 and 3 are the pre-registered holdout tests H1 and H2 (docs/preregistration.md, registered
+// 2026-09-27). Their rules were fixed after the design set had been seen, so their OFFICIAL results
+// use only holdout-window signals; the design-set numbers shown beside them are descriptive, never evidence.
 export const GATE_HORIZON = 30;
 export const GATE_MIN_SIGNALS = 50;
 export const GATE_MAX_PARSE_ERROR = 0.01;
@@ -34,59 +36,58 @@ export interface PipelineHealth {
 }
 
 const pct = (x: number, d = 1) => `${(x * 100).toFixed(d)}%`;
-const signedPct = (x: number) => `${x >= 0 ? '+' : '−'}${Math.abs(x).toFixed(2)}%`;
-
-function tierLine(label: string, s: Summary): string {
-  return s.sufficient ? `${label}: n=${s.n}, mean ${signedPct(s.mean)}` : `${label}: n=${s.n} (needs ${MIN_N})`;
-}
-
-/** Signals scored by both scorers with a complete outcome at the gate horizon, ready for the head-to-head. */
-function pairedFor(facts: SignalFact[], view: ViewOptions): Paired[] {
-  return facts.flatMap((f) => {
-    const excess = excessAt(f, GATE_HORIZON, view);
-    return f.agentScore !== null && f.baselineScore !== null && excess !== null
-      ? [{ week: Math.floor(f.signalAt / WEEK_MS), agent: f.agentScore, baseline: f.baselineScore, excess }]
-      : [];
-  });
-}
-
 const signed = (x: number) => `${x >= 0 ? '+' : '−'}${Math.abs(x).toFixed(2)}`;
-const rho = (x: number) => (Number.isNaN(x) ? '—' : x.toFixed(2));
 
-function h2hLine(h: HeadToHead): string {
-  return (
-    `top third by each scorer on ${h.n} shared signals: agent ${signed(h.agentMean)}% vs baseline ${signed(h.baselineMean)}% ` +
-    `(difference ${signed(h.difference)}, 95% interval ${Number.isNaN(h.lo) ? '—' : `${signed(h.lo)} to ${signed(h.hi)}`}, weekly-block bootstrap). ` +
-    `Rank correlation with 30-day return, all shared signals: agent ${rho(h.spearmanAgent)}, baseline ${rho(h.spearmanBaseline)}.`
-  );
+const holdoutClause = (from: string | null) => (from ? `signals from ${from}` : 'holdout-window signals');
+
+/** Gate 2 = H1: top-tier signals have a positive average 30-day excess return, judged on the holdout. */
+function gate2From(h1: PreregResult, interim: PreregResult, holdoutFrom: string | null): Gate {
+  const title = `Top-tier signals show a positive average ${GATE_HORIZON}-day net excess return (pre-registered, judged on the holdout)`;
+  const interimText = ` Design set, NOT evidence: ${interim.detail}`;
+  if (h1.status === 'awaiting') {
+    return { id: 2, title, status: 'insufficient', detail: `Awaiting the holdout (${holdoutClause(holdoutFrom)}): ${h1.progress} signals scored by both with complete outcomes.${interimText}` };
+  }
+  return {
+    id: 2,
+    title,
+    status: h1.status === 'supported' ? 'pass' : 'fail',
+    detail: `Holdout: top tier (top third by either scorer) ${h1.detail}${interimText}`,
+  };
 }
 
 /**
- * Gate 3. Tiers are the top third by each scorer's own rank on the shared signals; the difference in
- * tier means is bootstrapped in weekly blocks with both tiers rebuilt each time; the agent is kept
- * only if that difference is above zero with 95% confidence, otherwise it is dropped. This rule was
- * chosen after the design set had been looked at, so the OFFICIAL verdict uses only signals from the
- * holdout window (revealed in Settings). Until then the design-set result is shown as provisional.
+ * Gate 3 = H2. The agent is NOT promoted by default: it keeps running as a shadow scorer that no decision
+ * uses, and Phase 2 proceeds on the baseline alone unless the pre-registered rank-correlation test says
+ * otherwise. That is a decided outcome (the spec allows either), so the gate passes; the detail says which.
+ * Note the registration itself says this test is underpowered at n=300, so "not promoted" is the expected result.
  */
-function gate3For(facts: SignalFact[], view: ViewOptions, holdoutFrom: string | null): Gate {
-  const title = "The agent's top tier beats the baseline's top tier (95% confidence), or the agent is dropped";
-  const official = headToHead(pairedFor(facts.filter((f) => f.holdoutWindow), view));
-  const interim = headToHead(pairedFor(facts.filter((f) => !f.holdoutWindow), view));
-  const windowCount = facts.filter((f) => f.holdoutWindow).length;
-  const interimText = interim.n >= 3 ? `Interim on the design set, NOT evidence: ${h2hLine(interim)}` : 'Interim: too few shared signals yet.';
+function gate3From(facts: SignalFact[], view: ViewOptions, h2: PreregResult, interim: PreregResult): Gate {
+  const title = 'The agent is promoted only if it out-ranks the baseline on the pre-registered test; otherwise it stays a shadow scorer';
+  const design = facts.filter((f) => !f.holdoutWindow);
+  const rows = design.flatMap((f) => (f.agentScore !== null && f.baselineScore !== null ? [f] : []));
+  const tier = headToHead(
+    rows.flatMap((f) => {
+      const e = f.outcomes[GATE_HORIZON]?.[view.bench];
+      const net = e && e.status === 'complete' && e.excessPct !== null ? e.excessPct : null;
+      return net === null ? [] : [{ week: Math.floor(f.signalAt / (7 * 86_400_000)), agent: f.agentScore as number, baseline: f.baselineScore as number, excess: net }];
+    }),
+    { bootstraps: 300 },
+  );
+  const descriptive = tier.n >= 3 ? ` Top-third tiers (design set, descriptive only): agent ${signed(tier.agentMean)}% vs baseline ${signed(tier.baselineMean)}% on ${tier.n} shared signals.` : '';
+  const interimText = ` Rank-correlation difference on the design set, NOT evidence: ${interim.detail}${descriptive}`;
 
-  if (official.verdict) {
-    return {
-      id: 3,
-      title,
-      status: 'pass', // decided by data either way
-      detail: `${official.verdict === 'keep_agent' ? 'Keep the agent' : 'Drop the agent'}: ${official.reason}. Holdout: ${h2hLine(official)}`,
-    };
+  if (h2.status === 'supported') {
+    return { id: 3, title, status: 'pass', detail: `Promote the agent: holdout rank-correlation difference ${h2.detail} (n=${PREREG.h2Signals}).` };
   }
-  const waiting = holdoutFrom
-    ? `Official verdict awaits the holdout (signals from ${holdoutFrom}; ${windowCount} so far, ${official.n} with complete outcomes shared by both scorers, need ${3 * GATE3_MIN_TIER}+). `
-    : `Official verdict needs ${3 * GATE3_MIN_TIER}+ holdout-window signals scored by both with complete outcomes (${official.n} so far). `;
-  return { id: 3, title, status: 'insufficient', detail: waiting + interimText };
+  if (h2.status === 'not_supported') {
+    return { id: 3, title, status: 'pass', detail: `Not promoted: holdout rank-correlation difference ${h2.detail} (n=${PREREG.h2Signals}). The agent stays a shadow scorer.` };
+  }
+  return {
+    id: 3,
+    title,
+    status: 'pass',
+    detail: `Not promoted (default): the agent runs as a shadow scorer and Phase 2 uses the baseline. Pre-registered test at n=${PREREG.h2Signals} on the holdout (${h2.progress}).${interimText}`,
+  };
 }
 
 /**
@@ -102,24 +103,10 @@ export function evaluateGates(facts: SignalFact[], view: ViewOptions, health: Pi
     detail: `${complete} of ${GATE_MIN_SIGNALS}`,
   };
 
-  // Gates 2 and 3 compare tiers, so both scorers must have judged the same signals. While the agent has
-  // scored only some of them (it works newest first, and different months can behave very differently),
-  // the baseline tier over all signals against an agent tier over the scored ones compares different
-  // periods, not different scorers. Once every signal is scored this is exactly the spec's population.
-  const scored = facts.filter((f) => f.agentScore !== null);
-  const pool = scored.length > 0 ? scored : facts;
-  const basis = pool.length === facts.length ? '' : ` [on ${pool.length} signals scored by both]`;
-  const tiers = tiersFor(pool);
-  const top = summarize(excessValues(pool.filter(tiers.isTop), GATE_HORIZON, view));
-
-  const gate2: Gate = {
-    id: 2,
-    title: `Top-tier signals show a positive average ${GATE_HORIZON}-day excess return vs ${view.bench}`,
-    status: !top.sufficient ? 'insufficient' : top.mean > 0 ? 'pass' : 'fail',
-    detail: tierLine('Agent >= 70 or baseline top third', top) + basis,
-  };
-
-  const gate3 = gate3For(facts, view, opts.holdoutFrom ?? null);
+  const official = evaluatePrereg(facts, view);
+  const interim = interimPrereg(facts, view);
+  const gate2 = gate2From(official[0], interim[0], opts.holdoutFrom ?? null);
+  const gate3 = gate3From(facts, view, official[1], interim[1]);
 
   const parseRate = health.filings ? health.parseFailures / health.filings : 0;
   const uptime = health.weekdays ? health.weekdaysWithSuccessfulIngest / health.weekdays : 0;
@@ -134,5 +121,5 @@ export function evaluateGates(facts: SignalFact[], view: ViewOptions, health: Pi
   return [gate1, gate2, gate3, gate4];
 }
 
-/** All four gates passing is what unlocks Phase 2. */
+/** All four gates passing is what unlocks Phase 2. Gate 3 always resolves (promote, or not promoted), so it never blocks. */
 export const allGatesPass = (gates: Gate[]): boolean => gates.length === 4 && gates.every((g) => g.status === 'pass');

@@ -16,6 +16,7 @@ import {
   type ViewOptions,
 } from '@/lib/analytics/facts';
 import { allGatesPass, evaluateGates, GATE_HORIZON } from '@/lib/analytics/gates';
+import { PREREG, evaluatePrereg, interimPrereg } from '@/lib/analytics/prereg';
 import { loadPipelineHealth, loadSignalFacts } from '@/lib/analytics/load';
 import { histogram, MIN_N, rollingHitRate, SCORE_BANDS, summarize } from '@/lib/analytics/stats';
 import { requireUser } from '@/lib/auth/require-user';
@@ -75,6 +76,9 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
   // The gates always use the spec's basis (post-cutoff, net of costs) whatever the toggles say.
   const gateView: ViewOptions = { bench, net: true, scope: 'post', costs };
   const gates = evaluateGates(all.filter((f) => inScope(f, gateView)), gateView, health, { holdoutFrom: await loadHoldoutStart(db) });
+  const gateFacts = all.filter((f) => inScope(f, gateView));
+  const prereg = evaluatePrereg(gateFacts, gateView);
+  const preregInterim = interimPrereg(gateFacts, gateView);
 
   const href = (over: Record<string, string>) => {
     const p = new URLSearchParams({ bench, net: net ? '1' : '0', scope, h: String(horizon), off: excludeOffering ? '1' : '0', ...over });
@@ -210,6 +214,53 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
             </ol>
             <p className="mt-4 text-sm font-medium">
               {allGatesPass(gates) ? 'All gates pass: Phase 2 is unlocked.' : 'Phase 2 stays locked until every gate passes.'}
+            </p>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section aria-labelledby="prereg" className="mb-8">
+        <Card>
+          <CardHeader>
+            <CardTitle id="prereg">Pre-registered holdout tests</CardTitle>
+            <CardDescription>
+              Fixed on {PREREG.registered}, before any holdout return existed (docs/preregistration.md). Each is run once, at its registered size, on signals from the holdout start
+              only, with a one-sided 5% test and a weekly-block bootstrap. The design-set numbers are descriptive: the rules were chosen after seeing that data, so they are not evidence.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="px-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-muted-foreground border-b text-left text-xs tracking-wide uppercase">
+                    <th className="px-4 py-2 font-medium">Test</th>
+                    <th className="px-4 py-2 font-medium">Holdout status</th>
+                    <th className="px-4 py-2 font-medium">Progress</th>
+                    <th className="px-4 py-2 font-medium">Design set (not evidence)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {prereg.map((r, i) => (
+                    <tr key={r.id} className="border-b align-top last:border-b-0">
+                      <td className="px-4 py-2.5">
+                        <span className="font-mono font-medium">{r.id}</span> <span className="text-muted-foreground">{r.title}</span>
+                      </td>
+                      <td className="px-4 py-2.5 whitespace-nowrap">
+                        <Badge variant={r.status === 'supported' ? 'secondary' : 'outline'}>
+                          {r.status === 'awaiting' ? 'Awaiting' : r.status === 'supported' ? 'Supported' : 'Not supported'}
+                        </Badge>
+                        {r.status !== 'awaiting' ? <div className="text-muted-foreground mt-1 max-w-72 text-xs">{r.detail}</div> : null}
+                      </td>
+                      <td className="px-4 py-2.5 font-mono text-xs whitespace-nowrap">{r.progress}</td>
+                      <td className="text-muted-foreground px-4 py-2.5 text-xs">{preregInterim[i].detail}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-muted-foreground px-4 pt-3 text-xs">
+              H2 is registered as underpowered at n={PREREG.h2Signals} (interval half-width about ±0.13 on the rank-correlation difference, and a true difference of 0.1 would already be large), so an
+              inconclusive result is the expected outcome, and the agent stays a shadow scorer.
             </p>
           </CardContent>
         </Card>

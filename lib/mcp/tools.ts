@@ -11,6 +11,7 @@ import { COSTS_KEY, costsSchema } from '@/lib/market/costs';
 import { OFFERING_LIKE } from '@/lib/clusters/tags';
 import { getSetting } from '@/lib/settings';
 import { loadPortfolio } from '@/lib/analytics/portfolio-load';
+import { PREREG, evaluatePrereg, interimPrereg } from '@/lib/analytics/prereg';
 import { loadHoldoutStart } from '@/lib/research/holdout';
 import { search } from '@/lib/search';
 import { listEntries, readEntry } from '@/lib/worklog';
@@ -175,6 +176,12 @@ export function createMcpServer(): McpServer {
           : null,
         excessByHorizon: Object.fromEntries(HORIZONS.map((h) => [`${h}d`, summary(h)])),
         gates,
+        preregisteredTests: {
+          registered: PREREG.registered,
+          note: 'Fixed before any holdout return existed; official on holdout-window signals only. Design-set figures are descriptive, not evidence.',
+          holdout: evaluatePrereg(all.filter((f) => inScope(f, gateView)), gateView),
+          designSetDescriptive: interimPrereg(all.filter((f) => inScope(f, gateView)), gateView),
+        },
       });
     },
   );
