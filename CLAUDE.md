@@ -222,14 +222,22 @@ There is no Row Level Security, so access control is entirely in code:
 - **Pre-registered holdout tests** (`docs/preregistration.md`, `lib/analytics/prereg.ts`; registered 2026-09-27 before any holdout return
   existed; the `PREREG` constants ARE the registration, so changing one is a new dated registration, never a tweak). All use holdout-window
   signals only (signal day on/after the holdout start), the 30-day net excess vs SPY, a weekly-block bootstrap (whole calendar weeks
-  resampled), one-sided 5%, each run once at its fixed size. **H1 = gate 2**: top tier (top third by baseline OR by agent, rank-based)
-  has mean > 0, at 90+ signals scored by both. **H2 = gate 3**: agent Spearman minus baseline Spearman > 0, one-sided, the earliest
+  resampled), one-sided 5%, each run once at its fixed size. **H1 = gate 2**: the baseline's top third (rank-based) has mean > 0, at 90+ holdout signals with a
+  matured outcome. Deliberately baseline-only, independent of the agent (fixed 2026-09-27, before any holdout signal existed,
+  as a recorded deviation: it originally required signals scored by both, so it could stall if agent scoring did). **H2 = gate 3**: agent Spearman minus baseline Spearman > 0, one-sided, the earliest
   300 shared signals. **H3**: offering-like (`single_day_single_price`) clusters underperform, at 30+ tagged signals. Expect
   inconclusive results: H2 is registered as underpowered at n=300 (design-set interval about +/-0.13).
 - **Gate 3 default is "not promoted"**: the agent keeps running as a shadow scorer no decision uses (about $0.16 a month), Phase 2
   proceeds on the baseline, and gate 3 resolves (status pass, so it never blocks) with "Not promoted (default)" until H2 says
   "Promote". The top-third tier comparison (`head-to-head.ts`) is descriptive only: it needs a ~5-point gap at n=300.
   Design-set numbers beside the gates are labelled NOT evidence: the rules were chosen after seeing that data.
+- **Reveal is decoupled from the tests, locked, and audited.** H1/H2/H3 compute and show their own result once each reaches its
+  registered size, using `loadSignalFacts(db, { forTests: true })` (`getCachedSignalFactsForTests`), which sees real holdout
+  outcomes regardless of `reveal` -- ONLY the three gates/prereg calls may use it; everything else (signal pages, lists, CSV,
+  MCP) stays on the masked `getCachedSignalFacts()`. `holdoutAction` (`app/(app)/settings/actions.ts`) refuses to set
+  `reveal: true` unless every test has resolved or a 20+ character reason is given (`canReveal`, `lib/analytics/prereg.ts`);
+  records `revealedAt`/`revealedBy` on the transition; and refuses to change `from` while already revealed unless `reveal`
+  is turned back off in the same save (a fresh window). See docs/preregistration.md.
 - **Prompt versions** (`lib/agent/prompts/`, `promptFor`): design-set signals always use v1; holdout-window signals use v2 and only v2
   (never a mix) once `V2_ADOPTED` is true. **Status 2026-09-27: v2 failed the distribution check in rounds 1 and 2 (see the pre-registration's round log), so `V2_ADOPTED` is false and holdout signals use v1.** v2 is adopted by score distribution alone, never by returns
   (`npm run prompt:distribution -- v2` stores nothing and reads no returns; criteria in the pre-registration). Never edit a released

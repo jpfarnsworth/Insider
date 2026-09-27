@@ -9,10 +9,14 @@ import { NOTIFICATIONS_KEY, notificationsSchema } from '@/lib/notify/settings';
 import { telegramConfigured } from '@/lib/notify/telegram';
 import { BASELINE_VERSION, BASELINE_WEIGHTS_KEY, baselineWeightsSchema } from '@/lib/scoring/baseline';
 import { HOLDOUT_KEY, holdoutSchema } from '@/lib/research/holdout';
+import { getCachedSignalFactsForTests } from '@/lib/analytics/cache';
+import { evaluatePrereg } from '@/lib/analytics/prereg';
+import type { ViewOptions } from '@/lib/analytics/facts';
 import { getSetting, listVersions } from '@/lib/settings';
 import { formatDateTime } from '@/lib/format';
 import { PageHeader } from '@/components/page-header';
 import { SettingsForm } from '@/components/settings-form';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
@@ -94,6 +98,8 @@ export default async function SettingsPage() {
   const notify = await getSetting(db, NOTIFICATIONS_KEY, notificationsSchema);
   const holdout = await getSetting(db, HOLDOUT_KEY, holdoutSchema);
   const telegram = telegramConfigured();
+  const preregView: ViewOptions = { bench: 'SPY', net: true, scope: 'post', costs };
+  const prereg = evaluatePrereg(await getCachedSignalFactsForTests(), preregView);
 
   return (
     <>
@@ -188,20 +194,71 @@ export default async function SettingsPage() {
 
         <Section
           title="Holdout"
-          description="Signals from this day on are the untouched test window. Their returns stay out of every aggregate, gate, list, export and MCP tool until you reveal them, so tuning the rule or scores can't peek at them. Freeze the design first, then reveal once."
+          description="Signals from this day on are the untouched test window. Individual returns stay masked everywhere (their own pages, lists, CSV, MCP) until you reveal them. Each pre-registered test (below) computes and shows its own result automatically once it reaches its registered size, with no reveal needed, so tuning the design can't peek at raw data either way."
         >
+          <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {prereg.map((r) => (
+              <div key={r.id} className="rounded-lg border p-3">
+                <dt className="flex items-center gap-2 text-xs">
+                  <span className="font-mono font-medium">{r.id}</span>
+                  <Badge variant={r.status === 'supported' ? 'secondary' : 'outline'}>
+                    {r.status === 'awaiting' ? 'Awaiting' : r.status === 'supported' ? 'Supported' : 'Not supported'}
+                  </Badge>
+                </dt>
+                <dd className="text-muted-foreground mt-1 text-xs">{r.title}</dd>
+                <dd className="mt-1 font-mono text-xs">{r.progress}</dd>
+              </div>
+            ))}
+          </dl>
           <SettingsForm action={holdoutAction}>
             <label className="flex max-w-xs flex-col gap-1 text-sm">
               <span>Held out from (Chicago date)</span>
               <Input type="date" name="from" defaultValue={holdout.from} required className="font-mono" />
+              <span className="text-muted-foreground text-xs">
+                Locked (registered in docs/preregistration.md). Changing it needs the reason below, logged permanently, whether or not reveal is involved.
+              </span>
             </label>
-            <Check
-              name="reveal"
-              label="Reveal the holdout"
-              checked={holdout.reveal}
-              hint="Lifts the freeze. Each save is recorded in the history below, so revealing is an auditable event."
-            />
+            <label className="flex max-w-md flex-col gap-1 text-sm">
+              <span>Reason to change the holdout start date (only if you change it above)</span>
+              <textarea
+                name="fromChangeReason"
+                rows={2}
+                maxLength={2000}
+                placeholder="Required (20+ characters) only if the date above differs from what is saved."
+                className="border-input bg-background rounded-lg border px-2 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              />
+            </label>
+            <Check name="reveal" label="Reveal the holdout" checked={holdout.reveal} hint="Locked until every test above has resolved, unless you give a reason below." />
+            <label className="flex max-w-md flex-col gap-1 text-sm">
+              <span>Reason to reveal before every test has resolved (optional otherwise)</span>
+              <textarea
+                name="abandonReason"
+                rows={2}
+                maxLength={2000}
+                defaultValue={holdout.abandonReason ?? ''}
+                placeholder="Required (20+ characters) only if you reveal while a test is still pending."
+                className="border-input bg-background rounded-lg border px-2 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              />
+            </label>
           </SettingsForm>
+          {holdout.reveal && holdout.revealedAt ? (
+            <p className="bg-warning-bg text-warning rounded-lg px-3 py-2 text-xs">
+              Revealed {formatDateTime(new Date(holdout.revealedAt))} CT by {holdout.revealedBy ?? 'unknown'}.
+              {holdout.abandonedTests.length ? ` Revealed before ${holdout.abandonedTests.join(' and ')} finished: "${holdout.abandonReason}"` : ' All three tests had resolved.'}
+            </p>
+          ) : null}
+          {holdout.fromChanges.length ? (
+            <div className="text-xs">
+              <p className="text-muted-foreground mb-1 font-medium">Start-date change log (permanent):</p>
+              <ul className="space-y-1">
+                {holdout.fromChanges.map((c, i) => (
+                  <li key={i} className="text-muted-foreground">
+                    {formatDateTime(new Date(c.at))} CT, {c.by ?? 'unknown'}: {c.from} → {c.to} — &quot;{c.reason}&quot;
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <History settingKey={HOLDOUT_KEY} />
         </Section>
 

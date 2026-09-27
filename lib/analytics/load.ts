@@ -11,9 +11,13 @@ const num = (v: string | null): number | null => (v === null ? null : Number(v))
 
 /**
  * Every signal with its scores, cluster, roles and outcomes at every horizon. Read once per request.
- * Signals in the holdout window (lib/research/holdout.ts) come back with no outcomes.
+ * Signals in the holdout window (lib/research/holdout.ts) come back with no outcomes, UNLESS
+ * `opts.forTests` is set: the three pre-registered tests (lib/analytics/prereg.ts) need real holdout
+ * outcomes to compute and display their own result as soon as each reaches its registered sample
+ * size, without waiting for -- or exposing -- a manual reveal. Nothing else may use `forTests: true`:
+ * it must never reach a signal page, a list, a CSV or an MCP tool, which all stay masked until reveal.
  */
-export async function loadSignalFacts(db: Db): Promise<SignalFact[]> {
+export async function loadSignalFacts(db: Db, opts: { forTests?: boolean } = {}): Promise<SignalFact[]> {
   const [holdoutSettings, base, outcomes, roles] = await Promise.all([
     getSetting(db, HOLDOUT_KEY, holdoutSchema),
     db
@@ -53,7 +57,7 @@ export async function loadSignalFacts(db: Db): Promise<SignalFact[]> {
       group by ct.cluster_id`),
   ]);
 
-  const heldFrom = heldOutFrom(holdoutSettings);
+  const heldFrom = opts.forTests ? null : heldOutFrom(holdoutSettings);
   const roleMix = new Map<string, RoleMix>();
   for (const r of roles.rows) roleMix.set(r.cluster_id, r.ceo_cfo ? 'ceo_cfo' : r.officer ? 'other_officer' : r.director ? 'director' : 'other');
 
@@ -89,9 +93,11 @@ export async function loadSignalFacts(db: Db): Promise<SignalFact[]> {
     avgDollarVolume: num(b.avgDollarVolume),
     status: b.status,
     tags: b.tags,
-    holdout: isHeldOut(b.signalAt.getTime(), heldFrom),
+    // `holdout` reflects the real (unforced) freeze state, so display code that reads it (e.g. the
+    // dashboard's calendar-time portfolio, which excludes `holdout` signals) is unaffected by `forTests`.
+    holdout: isHeldOut(b.signalAt.getTime(), opts.forTests ? heldOutFrom(holdoutSettings) : heldFrom),
     holdoutWindow: isHeldOut(b.signalAt.getTime(), holdoutSettings.from),
-    // Held-out signals carry no returns, so no aggregate, tier, gate or export can see them.
+    // Held-out signals carry no returns outside a `forTests` call, so no display, list, gate or export can see them.
     outcomes: isHeldOut(b.signalAt.getTime(), heldFrom) ? {} : (bySignal.get(b.id) ?? {}),
   }));
 }

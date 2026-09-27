@@ -17,6 +17,14 @@ const TTL_SECONDS = 60;
 /** Every signal with its scores, cluster, roles and outcomes (lib/analytics/load.ts). The slowest single query. */
 export const getCachedSignalFacts = nextCache(() => loadSignalFacts(db), ['analytics-signal-facts'], { revalidate: TTL_SECONDS, tags: [ANALYTICS_TAG] });
 
+/**
+ * The same, but with real outcomes for holdout-window signals regardless of whether the holdout has
+ * been revealed (`loadSignalFacts`'s `forTests` option). ONLY the pre-registered tests (H1/H2/H3) may
+ * consume this: they report an aggregate number, never a per-signal one, so using it elsewhere would
+ * leak individual holdout returns ahead of the reveal.
+ */
+export const getCachedSignalFactsForTests = nextCache(() => loadSignalFacts(db, { forTests: true }), ['analytics-signal-facts-for-tests'], { revalidate: TTL_SECONDS, tags: [ANALYTICS_TAG] });
+
 /** Filing counts, parse failures and ingest uptime for the prior 30 days (lib/analytics/gates.ts). */
 export const getCachedPipelineHealth = nextCache(() => loadPipelineHealth(db), ['analytics-pipeline-health'], { revalidate: TTL_SECONDS, tags: [ANALYTICS_TAG] });
 

@@ -20,11 +20,11 @@ import { PREREG, evaluatePrereg, interimPrereg } from '@/lib/analytics/prereg';
 import { histogram, MIN_N, rollingHitRate, SCORE_BANDS, summarize } from '@/lib/analytics/stats';
 import { requireUser } from '@/lib/auth/require-user';
 import { COSTS_KEY, costsSchema } from '@/lib/market/costs';
-import { getCachedPipelineHealth, getCachedPortfolio, getCachedSignalFacts } from '@/lib/analytics/cache';
-import { loadHoldoutFrom, loadHoldoutStart } from '@/lib/research/holdout';
+import { getCachedPipelineHealth, getCachedPortfolio, getCachedSignalFacts, getCachedSignalFactsForTests } from '@/lib/analytics/cache';
+import { HOLDOUT_KEY, holdoutSchema, loadHoldoutFrom, loadHoldoutStart } from '@/lib/research/holdout';
 import { OFFERING_LIKE } from '@/lib/clusters/tags';
 import { DISPLAY_KEY, displaySchema } from '@/lib/display';
-import { formatPct, formatRate } from '@/lib/format';
+import { formatDateTime, formatPct, formatRate } from '@/lib/format';
 import { getSetting } from '@/lib/settings';
 import { BarChart } from '@/components/charts/bar-chart';
 import { LineChart } from '@/components/charts/line-chart';
@@ -71,10 +71,12 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
   const facts = all.filter((f) => inScope(f, view) && !(excludeOffering && f.tags.includes(OFFERING_LIKE)));
   const heldOut = all.filter((f) => f.holdout).length;
   const heldFrom = await loadHoldoutFrom(db);
+  const holdoutSettings = await getSetting(db, HOLDOUT_KEY, holdoutSchema);
 
   // The gates always use the spec's basis (post-cutoff, net of costs) whatever the toggles say.
   const gateView: ViewOptions = { bench, net: true, scope: 'post', costs };
-  const gates = evaluateGates(all.filter((f) => inScope(f, gateView)), gateView, health, { holdoutFrom: await loadHoldoutStart(db) });
+  const testFacts = await getCachedSignalFactsForTests();
+  const gates = evaluateGates(all.filter((f) => inScope(f, gateView)), gateView, health, { holdoutFrom: await loadHoldoutStart(db), testFacts: testFacts.filter((f) => inScope(f, gateView)) });
   const gateFacts = all.filter((f) => inScope(f, gateView));
   const prereg = evaluatePrereg(gateFacts, gateView);
   const preregInterim = interimPrereg(gateFacts, gateView);
@@ -223,10 +225,19 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
           <CardHeader>
             <CardTitle id="prereg">Pre-registered holdout tests</CardTitle>
             <CardDescription>
-              Fixed on {PREREG.registered}, before any holdout return existed (docs/preregistration.md). Each is run once, at its registered size, on signals from the holdout start
-              only, with a one-sided 5% test and a weekly-block bootstrap. The design-set numbers are descriptive: the rules were chosen after seeing that data, so they are not evidence.
+              Fixed on {PREREG.registered}, before any holdout return existed (docs/preregistration.md). Each shows its own result automatically once it reaches its registered size, on
+              signals from the holdout start, with a one-sided 5% test and a weekly-block bootstrap -- no reveal needed. The design-set numbers are descriptive: the rules were chosen after
+              seeing that data, so they are not evidence.
             </CardDescription>
           </CardHeader>
+          {holdoutSettings.revealedAt ? (
+            <div className="bg-warning-bg text-warning mx-6 mb-4 rounded-lg px-3 py-2 text-xs">
+              Holdout revealed {formatDateTime(new Date(holdoutSettings.revealedAt))} CT by {holdoutSettings.revealedBy ?? 'unknown'}.
+              {holdoutSettings.abandonedTests.length
+                ? ` This happened before ${holdoutSettings.abandonedTests.join(' and ')} finished. Reason: "${holdoutSettings.abandonReason}"`
+                : ' All three tests had already resolved.'}
+            </div>
+          ) : null}
           <CardContent className="px-0">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">

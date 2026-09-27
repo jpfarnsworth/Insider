@@ -72,7 +72,7 @@ describe('gate 2: pre-registered H1, judged on the holdout', () => {
   it('passes on the holdout when the top tier is clearly positive net of costs', () => {
     const g = withHoldout(holdoutSet(200, 25, { mean: 4, agentEdge: 1, baselineEdge: 1 }), 2);
     expect(g.status).toBe('pass');
-    expect(g.detail).toContain('Holdout: top tier');
+    expect(g.detail).toContain('Holdout: baseline top third');
   });
 
   it('fails when the holdout top tier is not positive, whatever the design set did', () => {

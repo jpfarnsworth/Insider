@@ -40,18 +40,22 @@ const signed = (x: number) => `${x >= 0 ? '+' : '−'}${Math.abs(x).toFixed(2)}`
 
 const holdoutClause = (from: string | null) => (from ? `signals from ${from}` : 'holdout-window signals');
 
-/** Gate 2 = H1: top-tier signals have a positive average 30-day excess return, judged on the holdout. */
+/**
+ * Gate 2 = H1: the baseline's top-third signals have a positive average 30-day excess return, judged
+ * on the holdout. Deliberately baseline-only (see topTierMean in prereg.ts): the baseline scores every
+ * signal immediately, so this gate keeps filling up even if agent scoring stalls.
+ */
 function gate2From(h1: PreregResult, interim: PreregResult, holdoutFrom: string | null): Gate {
-  const title = `Top-tier signals show a positive average ${GATE_HORIZON}-day net excess return (pre-registered, judged on the holdout)`;
+  const title = `The baseline's top-third signals show a positive average ${GATE_HORIZON}-day net excess return (pre-registered, judged on the holdout)`;
   const interimText = ` Design set, NOT evidence: ${interim.detail}`;
   if (h1.status === 'awaiting') {
-    return { id: 2, title, status: 'insufficient', detail: `Awaiting the holdout (${holdoutClause(holdoutFrom)}): ${h1.progress} signals scored by both with complete outcomes.${interimText}` };
+    return { id: 2, title, status: 'insufficient', detail: `Awaiting the holdout (${holdoutClause(holdoutFrom)}): ${h1.progress} signals with complete outcomes.${interimText}` };
   }
   return {
     id: 2,
     title,
     status: h1.status === 'supported' ? 'pass' : 'fail',
-    detail: `Holdout: top tier (top third by either scorer) ${h1.detail}${interimText}`,
+    detail: `Holdout: baseline top third ${h1.detail}${interimText}`,
   };
 }
 
@@ -94,7 +98,16 @@ function gate3From(facts: SignalFact[], view: ViewOptions, h2: PreregResult, int
  * The four evaluation gates. `facts` must already be the post-cutoff signals; `view` should be net
  * of costs (the Performance page forces both for this panel).
  */
-export function evaluateGates(facts: SignalFact[], view: ViewOptions, health: PipelineHealth, opts: { holdoutFrom?: string | null } = {}): Gate[] {
+/**
+ * `facts` must already be the post-cutoff signals; `view` should be net of costs (the Performance page
+ * forces both for this panel). `opts.testFacts`, if given, is used ONLY for the pre-registered tests'
+ * holdout-window calculation (H1/H2/H3): it must be the `forTests` (unmasked) variant of the same
+ * population, so a test can resolve as soon as it reaches its registered size, independent of whether
+ * the holdout has been revealed. Everything else here (gate 1, gate 4, the design-set/interim numbers)
+ * uses the ordinary masked `facts`, unaffected. Defaults to `facts` when omitted, so callers that don't
+ * distinguish masked/unmasked (all current tests) see the same behaviour as before this split.
+ */
+export function evaluateGates(facts: SignalFact[], view: ViewOptions, health: PipelineHealth, opts: { holdoutFrom?: string | null; testFacts?: SignalFact[] } = {}): Gate[] {
   const complete = excessValues(facts, GATE_HORIZON, view).length;
   const gate1: Gate = {
     id: 1,
@@ -103,7 +116,7 @@ export function evaluateGates(facts: SignalFact[], view: ViewOptions, health: Pi
     detail: `${complete} of ${GATE_MIN_SIGNALS}`,
   };
 
-  const official = evaluatePrereg(facts, view);
+  const official = evaluatePrereg(opts.testFacts ?? facts, view);
   const interim = interimPrereg(facts, view);
   const gate2 = gate2From(official[0], interim[0], opts.holdoutFrom ?? null);
   const gate3 = gate3From(facts, view, official[1], interim[1]);

@@ -15,8 +15,11 @@ import { COSTS_KEY, costsSchema } from '@/lib/market/costs';
 import { sendTelegram, telegramConfigured } from '@/lib/notify/telegram';
 import { NOTIFICATIONS_KEY, notificationsSchema } from '@/lib/notify/settings';
 import { BASELINE_WEIGHTS_KEY, baselineWeightsSchema } from '@/lib/scoring/baseline';
-import { HOLDOUT_KEY, holdoutSchema } from '@/lib/research/holdout';
-import { saveSetting } from '@/lib/settings';
+import { HOLDOUT_KEY, canChangeFrom, holdoutSchema } from '@/lib/research/holdout';
+import { getCachedSignalFactsForTests } from '@/lib/analytics/cache';
+import { canReveal, evaluatePrereg } from '@/lib/analytics/prereg';
+import type { ViewOptions } from '@/lib/analytics/facts';
+import { getSetting, saveSetting } from '@/lib/settings';
 import { ANALYTICS_TAG } from '@/lib/analytics/cache';
 import type { FormState } from './state';
 
@@ -117,12 +120,68 @@ export async function notificationsAction(_prev: FormState, fd: FormData): Promi
 
 
 /** Saves the holdout start date and whether it is revealed. Revealing is a versioned change, so it leaves a record. */
+/**
+ * Saves the holdout. Each pre-registered test (lib/analytics/prereg.ts) shows its own result as soon
+ * as it reaches its registered size, with no reveal needed, so this action never has to unblind
+ * anything to make a test resolve. Setting `reveal` only lifts the mask on individual holdout signals,
+ * and is locked until every test has resolved unless a written reason (20+ characters) is given, which
+ * is recorded verbatim. Changing `from` while already revealed would silently start a new holdout
+ * under the old audit trail, so it is refused: reveal must be turned off in the same save to start a
+ * fresh window.
+ */
 export async function holdoutAction(_prev: FormState, fd: FormData): Promise<FormState> {
-  await requireUser();
+  const user = await requireUser();
+  const from = String(fd.get('from') ?? '');
+  const wantsReveal = checked(fd, 'reveal');
+  const abandonReason = String(fd.get('abandonReason') ?? '').trim() || null;
+  const fromChangeReason = String(fd.get('fromChangeReason') ?? '').trim() || null;
+
+  const current = await getSetting(db, HOLDOUT_KEY, holdoutSchema);
+  if (current.reveal && from !== current.from && wantsReveal) {
+    return { status: 'error', message: 'This holdout is already revealed. To start a new one, set a later date and uncheck "Reveal" in the same save.' };
+  }
+  // The start date is locked as soon as it is registered (docs/preregistration.md): changing it needs
+  // the same written-reason bar as an early reveal, logged permanently, whether or not reveal is involved.
+  const dateCheck = canChangeFrom(current.from, from, fromChangeReason);
+  if (!dateCheck.ok) return { status: 'error', message: dateCheck.error };
+  const fromChanges =
+    from === current.from
+      ? current.fromChanges
+      : [...current.fromChanges, { at: new Date().toISOString(), by: user.email ?? null, from: current.from, to: from, reason: fromChangeReason! }];
+
+  let revealedAt = current.revealedAt;
+  let revealedBy = current.revealedBy;
+  let abandonedTests = current.abandonedTests;
+  let finalAbandonReason = current.abandonReason;
+
+  if (wantsReveal && !current.reveal) {
+    // Flipping false -> true right now: check the registered tests before allowing it.
+    const [costs, testFacts] = await Promise.all([getSetting(db, COSTS_KEY, costsSchema), getCachedSignalFactsForTests()]);
+    const view: ViewOptions = { bench: 'SPY', net: true, scope: 'post', costs };
+    const results = evaluatePrereg(testFacts, view);
+    const check = canReveal(results, abandonReason);
+    if (!check.ok) return { status: 'error', message: check.error };
+    revealedAt = new Date().toISOString();
+    revealedBy = user.email ?? null;
+    abandonedTests = check.pending;
+    finalAbandonReason = check.pending.length ? abandonReason : null;
+  } else if (!wantsReveal) {
+    // Turning reveal off (or it already was off): a fresh audit trail starts the next time it flips on.
+    revealedAt = null;
+    revealedBy = null;
+    abandonedTests = [];
+    finalAbandonReason = null;
+  }
+
   return save(
     HOLDOUT_KEY,
     holdoutSchema,
-    { from: String(fd.get('from') ?? ''), reveal: checked(fd, 'reveal') },
-    (v) => `Saved as revision ${v}. Every page, export and MCP tool follows it.`,
+    { from, reveal: wantsReveal, revealedAt, revealedBy, abandonReason: finalAbandonReason, abandonedTests, fromChanges },
+    (v) =>
+      wantsReveal && !current.reveal
+        ? `Revealed as revision ${v}. Every page, export and MCP tool now shows holdout signals.`
+        : from !== current.from
+          ? `Saved as revision ${v}. Start date changed and logged.`
+          : `Saved as revision ${v}.`,
   );
 }

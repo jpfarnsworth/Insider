@@ -11,7 +11,7 @@ import { OFFERING_LIKE } from '@/lib/clusters/tags';
 export const PREREG = {
   registered: '2026-09-27',
   bootstraps: 2000,
-  /** H1 / gate 2: minimum holdout signals scored by both with a complete outcome. */
+  /** H1 / gate 2: minimum holdout signals with a complete outcome (baseline top third; no agent dependency). */
   h1Signals: 90,
   /** H2 / gate 3: the earliest N holdout signals scored by both with a complete outcome. */
   h2Signals: 300,
@@ -64,12 +64,17 @@ export function blockBootstrap<T extends { week: number }>(items: T[], stat: (sa
 
 // --- Statistics ---------------------------------------------------------------
 
-/** H1 statistic: mean excess of the top tier = top third by the baseline OR top third by the agent (rank-based, tie-weighted). */
+/**
+ * H1 statistic: mean excess of the baseline's top third (rank-based, tie-weighted). Deliberately does
+ * NOT touch the agent's score: the baseline scores every signal as soon as it's created, so H1 keeps
+ * filling up even if agent scoring stalls (a lapsed key, a quota, a code change). H2 is the only test
+ * that needs both scorers. (Deviation, docs/preregistration.md: H1 was originally defined as the union
+ * of each scorer's top third, on signals scored by both, which made it depend on the agent for no
+ * reason -- fixed 2026-09-27, before any holdout signal existed.)
+ */
 export function topTierMean(rows: PreregRow[]): number {
-  const both = rows.filter((r) => r.agent !== null && r.baseline !== null);
-  const wa = topThirdWeights(both.map((r) => r.agent as number));
-  const wb = topThirdWeights(both.map((r) => r.baseline as number));
-  return weightedMean(both.map((r) => r.excess), wa.map((w, i) => Math.max(w, wb[i])));
+  const withBaseline = rows.filter((r) => r.baseline !== null);
+  return weightedMean(withBaseline.map((r) => r.excess), topThirdWeights(withBaseline.map((r) => r.baseline as number)));
 }
 
 /** H2 statistic: agent rank correlation with the 30-day return minus the baseline's. */
@@ -121,14 +126,17 @@ interface Spec {
 const SPECS: Spec[] = [
   {
     id: 'H1',
-    title: 'Top-tier signals have a positive average 30-day excess return (gate 2)',
+    title: "The baseline's top-tier signals have a positive average 30-day excess return (gate 2)",
     stat: topTierMean,
     seed: PREREG.seeds.h1,
     direction: 'greater',
     digits: 2,
+    // Every holdout signal with a matured outcome: no dependency on the agent (see topTierMean).
     select: (rows) => {
-      const both = rows.filter((r) => r.agent !== null && r.baseline !== null);
-      return both.length >= PREREG.h1Signals ? { rows: both, progress: `${both.length} of ${PREREG.h1Signals}` } : { rows: null, progress: `${both.length} of ${PREREG.h1Signals}` };
+      const withBaseline = rows.filter((r) => r.baseline !== null);
+      return withBaseline.length >= PREREG.h1Signals
+        ? { rows: withBaseline, progress: `${withBaseline.length} of ${PREREG.h1Signals}` }
+        : { rows: null, progress: `${withBaseline.length} of ${PREREG.h1Signals}` };
     },
   },
   {
@@ -198,7 +206,7 @@ export function interimPrereg(facts: SignalFact[], view: ViewOptions, bootstraps
   return (['H1', 'H2', 'H3'] as const).map((id) => {
     // Interim ignores the fixed-size gate: it reports whatever the design set gives.
     const spec = SPECS.find((s) => s.id === id)!;
-    const usable = id === 'H3' ? rows : rows.filter((r) => r.agent !== null && r.baseline !== null);
+    const usable = id === 'H1' ? rows.filter((r) => r.baseline !== null) : id === 'H3' ? rows : rows.filter((r) => r.agent !== null && r.baseline !== null);
     const dist = blockBootstrap(usable, spec.stat, bootstraps, spec.seed);
     if (!dist.length) return { id, title: spec.title, status: 'awaiting' as const, progress: `${usable.length} design-set signals`, detail: 'Too little data.', estimate: null, lo: null, hi: null };
     const estimate = spec.stat(usable);
@@ -215,4 +223,33 @@ export function interimPrereg(facts: SignalFact[], view: ViewOptions, bootstraps
       hi,
     };
   });
+}
+
+// --- Reveal gating (docs/preregistration.md: "the reveal is locked until all three have run, or you
+// record a decision to abandon the unfinished ones") -------------------------------------------------
+
+export const MIN_ABANDON_REASON_LENGTH = 20;
+
+export interface RevealCheck {
+  ok: boolean;
+  /** Test ids that have not yet reached their registered sample size. */
+  pending: PreregResult['id'][];
+  error?: string;
+}
+
+/**
+ * Whether the holdout may be revealed right now. Each test shows its own result automatically once it
+ * reaches its registered size, with no reveal needed -- reveal only lifts the mask on individual
+ * holdout signals (their own pages, lists, CSV, MCP). Revealing early is allowed only with a written
+ * reason of some substance, so it is a deliberate, recorded decision, not a stray checkbox.
+ */
+export function canReveal(results: PreregResult[], abandonReason: string | null): RevealCheck {
+  const pending = results.filter((r) => r.status === 'awaiting').map((r) => r.id);
+  if (pending.length === 0) return { ok: true, pending };
+  if (abandonReason && abandonReason.trim().length >= MIN_ABANDON_REASON_LENGTH) return { ok: true, pending };
+  return {
+    ok: false,
+    pending,
+    error: `${pending.join(' and ')} ${pending.length > 1 ? 'are' : 'is'} still awaiting ${pending.length > 1 ? 'their' : 'its'} registered sample size. Wait for ${pending.length > 1 ? 'them' : 'it'}, or give a reason of at least ${MIN_ABANDON_REASON_LENGTH} characters to reveal anyway.`,
+  };
 }

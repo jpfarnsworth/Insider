@@ -16,10 +16,10 @@ fixed first. So the three tests below, their sizes and their rules are fixed now
 - **Method for all tests:** whole calendar weeks are resampled with replacement (signals in a week move together), 2000 resamples, fixed seeds, one-sided 5% level. Each test is run **once**, at its fixed size, with no peeking at interim results as evidence. No multiple-testing correction: the three are separate hypotheses with separate decisions.
 - **The holdout stays hidden** (Settings) until the design is frozen. Revealing it is a recorded, versioned setting change.
 
-## H1 (gate 2): the top tier makes money
-- **Hypothesis:** the mean 30-day net excess return of the top tier is greater than 0. Top tier = the top third by the baseline OR the top third by the agent, ranked within the holdout sample (a tie at a boundary shares weight).
-- **Size:** the holdout has 90 or more signals scored by both with complete outcomes. All of them are used.
-- **Decision:** supported if the one-sided 5% lower bound of the bootstrap distribution is above 0, otherwise not supported (gate 2 fails). The spec's fixed "agent score >= 70" is replaced by ranks because the agent's scores are bunched (a fixed 70 selected about two thirds of signals).
+## H1 (gate 2): the baseline's top tier makes money
+- **Hypothesis:** the mean 30-day net excess return of the baseline's top third is greater than 0, ranked within the holdout sample (a tie at a boundary shares weight). **Baseline only, by design**: the baseline scores every signal as soon as it's created, so H1 does not depend on the agent and keeps filling up even if agent scoring stalls.
+- **Size:** the holdout has 90 or more signals with a complete outcome. All of them are used, whether or not the agent has scored them.
+- **Decision:** supported if the one-sided 5% lower bound of the bootstrap distribution is above 0, otherwise not supported (gate 2 fails). The spec's fixed "agent score >= 70 or baseline top third" union is replaced by baseline rank alone (see the 2026-09-27 deviation below): a union tier makes the gate depend on the agent for no reason, and the agent's scores are bunched anyway (a fixed 70 selected about two thirds of signals).
 - **Expected timing:** early to mid 2027 (about 24 signals a month, plus about six weeks for a 30-day outcome).
 
 ## H2 (gate 3): promote the agent only if it out-ranks the baseline
@@ -58,5 +58,37 @@ Two things noted while deciding, neither of which changes the registered criteri
 - The model scores nearly every cluster as good whatever the framing, so the spread criteria (share at 70 or above, IQR) may be unreachable by wording alone. Rank tests are unaffected by the scale of the scores; what hurts them is ties (few distinct values). The registered criteria stay as written; relaxing them would be a deviation recorded here, with its reason.
 - v1 already shows the larger rank-correlation edge on the design set (agent minus baseline +0.110, 90% interval +0.016 to +0.205, 473 signals; descriptive, not evidence). Adopting v2 would make H2 test a scorer with no track record, so a v2 that passes on distribution should still be judged only by the registered process.
 
+## Revealing the holdout
+Each test (H1, H2, H3) computes and shows its own result automatically once it reaches its registered sample size --
+**no reveal needed**. Reveal controls something narrower: whether *individual* holdout signals become visible
+(their own page, the signals list, CSV export, MCP), which stays masked (no outcomes at all) until you flip it.
+
+- **Locked by default.** Revealing is refused unless all three tests have resolved (supported or not supported), or
+  you give a written reason of 20+ characters, recorded verbatim next to which tests were still pending.
+- **Audited.** The moment reveal flips false to true, the app records who and when, alongside the setting's own
+  versioned history.
+- **Used up.** Once revealed, that holdout window is spent: it has been looked at. Any new idea that comes from
+  digging into it -- a new filter, a new tag, a new prompt version -- is tested on a **fresh** holdout window that
+  starts on or after the reveal date, registered the same way this one was. Changing `from` while already revealed
+  is refused unless `reveal` is turned back off in the same save, so a new window can't be opened under the old
+  audit trail.
+- **The start date itself is locked**, as of this registration (2026-09-27), not just once the window opens. Moving
+  it at all -- earlier, later, before or after any reveal -- needs the same 20+ character written reason, logged
+  permanently with a timestamp and who made it (`holdout.fromChanges`, shown on the Settings page). Moving it
+  without a reason would let a look at design-set results quietly decide which signals count as holdout.
+- **An early-reveal reason is shown next to the test results**, not only in Settings: the Performance page's
+  pre-registered-tests panel and the MCP `get_performance` tool both carry the reveal timestamp, who did it, which
+  tests were still pending, and the reason verbatim, so anyone reading a result later can see whether the holdout
+  was opened early and why.
+
 ## Deviations
 Any departure from this document is recorded here, dated, with the reason, and in the work log. Results of these tests are reported as registered, including inconclusive ones.
+
+### 2026-09-27: H1 decoupled from the agent
+As first written, H1's top tier was the union of the baseline's top third OR the agent's top third, and its
+population was "signals scored by both." That makes a baseline-only question ("do the top-ranked signals beat
+SPY?") depend on the agent continuing to score signals: if shadow scoring stalled (a lapsed API key, a quota,
+a code change), H1 would silently stop accumulating. The union/shared-signals rule was meant for head-to-head
+comparisons (H2), not for H1. **Fixed before any holdout signal existed**: H1's top tier is now the baseline's
+top third alone, over every holdout signal with a matured outcome, independent of the agent. The registered
+size (90) and decision rule (one-sided 5%) are unchanged.

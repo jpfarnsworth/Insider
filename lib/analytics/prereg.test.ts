@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_COSTS } from '@/lib/market/costs';
 import type { SignalFact, ViewOptions } from './facts';
 import { fact } from './fixtures';
-import { PREREG, blockBootstrap, evaluatePrereg, interimPrereg, offeringGap, quantile, rankCorrelationDifference, runPrereg, topTierMean, type PreregRow } from './prereg';
+import { MIN_ABANDON_REASON_LENGTH, PREREG, blockBootstrap, canReveal, evaluatePrereg, interimPrereg, offeringGap, quantile, rankCorrelationDifference, runPrereg, topTierMean, type PreregRow } from './prereg';
 
 // The registered bootstrap is 2000 resamples of a few hundred signals per test: slow on a busy Pi.
 vi.setConfig({ testTimeout: 30_000 });
@@ -48,12 +48,18 @@ describe('helpers', () => {
 });
 
 describe('statistics', () => {
-  const row = (agent: number, baseline: number, excess: number, tagged = false, week = 0): PreregRow => ({ week, at: 0, agent, baseline, excess, tagged });
+  const row = (agent: number | null, baseline: number, excess: number, tagged = false, week = 0): PreregRow => ({ week, at: 0, agent, baseline, excess, tagged });
 
-  it('top tier is the union of each scorer\'s top third', () => {
-    // 6 rows: agent top-2 are rows 0,1; baseline top-2 are rows 4,5; union = 4 rows.
+  it('top tier is the baseline\'s top third only, ignoring the agent score', () => {
+    // Baseline top-2 by score are rows 4 and 5 (9 and 8); the agent's own top rows (0, 1) are not counted.
     const rows = [row(9, 1, 10), row(8, 2, 8), row(2, 3, 0), row(1, 4, 0), row(3, 9, -4), row(4, 8, -6)];
-    expect(topTierMean(rows)).toBeCloseTo((10 + 8 - 4 - 6) / 4, 9);
+    expect(topTierMean(rows)).toBeCloseTo((-4 + -6) / 2, 9);
+  });
+
+  it('top tier counts rows with no agent score at all: H1 must not depend on the agent', () => {
+    // 6 rows, clean top-third of 2, all agent scores missing.
+    const rows = [row(null, 9, 10), row(null, 8, 8), row(null, 7, 6), row(null, 3, 0), row(null, 2, -4), row(null, 1, -6)];
+    expect(topTierMean(rows)).toBeCloseTo((10 + 8) / 2, 9);
   });
 
   it('rank correlation difference favours the scorer that orders returns', () => {
@@ -105,5 +111,30 @@ describe('registered tests', () => {
     const interim = interimPrereg(holdout(200, 25, { agentEdge: 1 }).map((f) => ({ ...f, holdoutWindow: false })), view, 100);
     expect(interim.every((r) => r.status === 'awaiting')).toBe(true);
     expect(interim[1].estimate).not.toBeNull();
+  });
+});
+
+describe('canReveal', () => {
+  const supported = { id: 'H1', title: '', status: 'supported', progress: '90 of 90', detail: '', estimate: 1, lo: 0.1, hi: 2 } as const;
+  const awaiting = (id: 'H1' | 'H2' | 'H3') => ({ id, title: '', status: 'awaiting', progress: '0 of 90', detail: '', estimate: null, lo: null, hi: null }) as const;
+
+  it('allows revealing once every test has resolved', () => {
+    expect(canReveal([supported, { ...supported, id: 'H2' }, { ...supported, id: 'H3' }], null)).toEqual({ ok: true, pending: [] });
+  });
+
+  it('blocks revealing while a test is still pending, with no reason given', () => {
+    const r = canReveal([supported, awaiting('H2'), awaiting('H3')], null);
+    expect(r.ok).toBe(false);
+    expect(r.pending).toEqual(['H2', 'H3']);
+    expect(r.error).toContain('H2 and H3');
+  });
+
+  it('rejects a reason that is too short, but accepts one long enough', () => {
+    expect(canReveal([awaiting('H1')], 'too short').ok).toBe(false);
+    expect(canReveal([awaiting('H1')], 'x'.repeat(MIN_ABANDON_REASON_LENGTH)).ok).toBe(true);
+  });
+
+  it('ignores whitespace padding when checking the reason length', () => {
+    expect(canReveal([awaiting('H1')], ` ${'x'.repeat(MIN_ABANDON_REASON_LENGTH - 1)} `).ok).toBe(false);
   });
 });
