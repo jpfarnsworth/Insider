@@ -186,7 +186,7 @@ There is no Row Level Security, so access control is entirely in code:
   `McpServer` + transport per request), open CORS for claude.ai's connector, bearer token `MCP_READ_TOKEN` (>= 32 chars,
   constant-time compare, closed if unset). `proxy.ts` lets `/api/mcp` through, so the route's own `checkMcpAuth` is the access
   check: the one deliberate exception to "requireUser everywhere". Every request is logged to `mcp_request_logs` (no arguments).
-- Tools (`lib/mcp/tools.ts`): `list_signals`, `get_signal`, `get_performance`, `search`, `pipeline_status`. Thin adapters over
+- Tools (`lib/mcp/tools.ts`): `list_signals`, `get_signal`, `get_performance`, `search`, `pipeline_status`, `list_work_log`, `read_work_log`. Thin adapters over
   `lib/signals`, `lib/analytics`, `lib/search` and `lib/mcp/queries.ts`, so numbers match the UI. Filing and agent text is
   untrusted and the tool descriptions say so.
 - Phase 2 trading tools must not go on this token: add a separate `MCP_READWRITE_TOKEN` with its own scope check, as Life OS does.
@@ -211,6 +211,13 @@ There is no Row Level Security, so access control is entirely in code:
 - **Dollar volume**: `signals.avg_dollar_volume` picks the cost tier and unknown counts as thin (1.0%). It was found empty for 96%
   of signals (stale until `compute-outcomes` re-ran), overstating costs. `/system` now shows how many signals lack it; run compute-outcomes if it is high.
 - Gemini: the request has no `tools` (no Search grounding); the model's documented cutoff is January 2025 (`lib/agent/models.ts`).
+
+## Work log
+
+After finishing each piece of work (a feature, a fix, a research finding), write a short entry to `docs/work-log/YYYY-MM-DD-NN-slug.md`
+(Chicago date, two-digit sequence, lowercase slug) and commit it with the work. Format and rules are in `docs/work-log/README.md`:
+a `# Title`, one summary paragraph, then what changed, decisions, how it was verified, follow-ups. No secrets or `.env` values.
+The MCP tools `list_work_log` / `read_work_log` (`lib/worklog.ts`) serve these files, so Claude Desktop can be told what was built.
 
 ## Rules that are easy to get wrong
 
