@@ -2,6 +2,7 @@ import { excessAt, type SignalFact, type ViewOptions } from './facts';
 import { mulberry32, topThirdWeights, weightedMean } from './head-to-head';
 import { spearman } from './stats';
 import { OFFERING_LIKE } from '@/lib/clusters/tags';
+import type { FrozenResult, PreregStore } from './prereg-store';
 
 // Pre-registered holdout tests (docs/preregistration.md, registered 2026-09-27, before any holdout
 // return existed). The constants here ARE the registration: changing one is a new registration, not a
@@ -25,6 +26,7 @@ export const PREREG = {
 const WEEK_MS = 7 * 86_400_000;
 
 export interface PreregRow {
+  id: string;
   week: number;
   at: number;
   agent: number | null;
@@ -39,7 +41,7 @@ export function preregRows(facts: SignalFact[], view: ViewOptions): PreregRow[] 
     const excess = excessAt(f, 30, view);
     return excess === null
       ? []
-      : [{ week: Math.floor(f.signalAt / WEEK_MS), at: f.signalAt, agent: f.agentScore, baseline: f.baselineScore, excess, tagged: f.tags.includes(OFFERING_LIKE) }];
+      : [{ id: f.id, week: Math.floor(f.signalAt / WEEK_MS), at: f.signalAt, agent: f.agentScore, baseline: f.baselineScore, excess, tagged: f.tags.includes(OFFERING_LIKE) }];
   });
 }
 
@@ -131,11 +133,16 @@ const SPECS: Spec[] = [
     seed: PREREG.seeds.h1,
     direction: 'greater',
     digits: 2,
-    // Every holdout signal with a matured outcome: no dependency on the agent (see topTierMean).
+    // The EARLIEST h1Signals holdout signals with a matured outcome, no dependency on the agent (see
+    // topTierMean). Fixed at first reach, not "every one so far": if this kept growing as more signals
+    // matured, the result would be a running number you could watch drift across zero and stop on
+    // whenever it looked good (optional stopping) -- exactly what freezing (evaluateOfficialPrereg) exists
+    // to prevent. Sorted by signal date so a later-arriving, earlier-dated signal (a late-filed Form 4)
+    // can't retroactively change which ones were "first" once frozen.
     select: (rows) => {
-      const withBaseline = rows.filter((r) => r.baseline !== null);
+      const withBaseline = rows.filter((r) => r.baseline !== null).sort((a, b) => a.at - b.at);
       return withBaseline.length >= PREREG.h1Signals
-        ? { rows: withBaseline, progress: `${withBaseline.length} of ${PREREG.h1Signals}` }
+        ? { rows: withBaseline.slice(0, PREREG.h1Signals), progress: `${withBaseline.length} of ${PREREG.h1Signals}` }
         : { rows: null, progress: `${withBaseline.length} of ${PREREG.h1Signals}` };
     },
   },
@@ -160,44 +167,118 @@ const SPECS: Spec[] = [
     seed: PREREG.seeds.h3,
     direction: 'less',
     digits: 2,
+    // The earliest prefix (by signal date, tagged and untagged together) whose tagged count first
+    // reaches h3Tagged, fixed at that moment -- not "every signal so far," for the same optional-stopping
+    // reason as H1.
     select: (rows) => {
-      const tagged = rows.filter((r) => r.tagged).length;
-      return tagged >= PREREG.h3Tagged ? { rows, progress: `${tagged} tagged of ${PREREG.h3Tagged} (${rows.length} signals)` } : { rows: null, progress: `${tagged} tagged of ${PREREG.h3Tagged} (${rows.length} signals)` };
+      const sorted = [...rows].sort((a, b) => a.at - b.at);
+      let tagged = 0;
+      let cut = -1;
+      for (let i = 0; i < sorted.length; i++) {
+        if (sorted[i].tagged) tagged++;
+        if (tagged >= PREREG.h3Tagged) {
+          cut = i;
+          break;
+        }
+      }
+      const progress = `${tagged} tagged of ${PREREG.h3Tagged} (${sorted.length} signals so far)`;
+      return cut < 0 ? { rows: null, progress } : { rows: sorted.slice(0, cut + 1), progress: `${PREREG.h3Tagged} tagged of ${PREREG.h3Tagged} (${cut + 1} signals)` };
     },
   },
 ];
 
-/**
- * Evaluates one pre-registered test on the given rows (the holdout window's completed signals, or the
- * design set for an interim look). `official` uses the registered bootstrap count; the interim uses fewer
- * and must always be labelled as not evidence.
- */
-export function runPrereg(id: PreregResult['id'], rows: PreregRow[], bootstraps: number = PREREG.bootstraps): PreregResult {
+interface ComputedTest {
+  result: PreregResult;
+  /** The exact signals used, in the order the statistic saw them -- null while still awaiting. Freezing
+   * records this permanently, so "which 90 (or 300, or the H3 prefix) signals" is never in question later. */
+  signalIds: string[] | null;
+}
+
+function computeTest(id: PreregResult['id'], rows: PreregRow[], bootstraps: number = PREREG.bootstraps): ComputedTest {
   const spec = SPECS.find((s) => s.id === id)!;
   const chosen = spec.select(rows);
   const base = { id: spec.id, title: spec.title, progress: chosen.progress, estimate: null, lo: null, hi: null };
-  if (!chosen.rows) return { ...base, status: 'awaiting', detail: `Awaiting the registered sample size (${chosen.progress}).` };
+  if (!chosen.rows) return { result: { ...base, status: 'awaiting', detail: `Awaiting the registered sample size (${chosen.progress}).` }, signalIds: null };
 
   const dist = blockBootstrap(chosen.rows, spec.stat, bootstraps, spec.seed);
-  if (!dist.length) return { ...base, status: 'awaiting', detail: 'Too few distinct weeks to resample.' };
+  if (!dist.length) return { result: { ...base, status: 'awaiting', detail: 'Too few distinct weeks to resample.' }, signalIds: null };
   const estimate = spec.stat(chosen.rows);
   const lo = quantile(dist, PREREG.alpha);
   const hi = quantile(dist, 1 - PREREG.alpha);
   const supported = spec.direction === 'greater' ? lo > 0 : hi < 0;
   return {
-    ...base,
-    status: supported ? 'supported' : 'not_supported',
-    estimate,
-    lo,
-    hi,
-    detail: `${fmt(estimate, spec.digits)} (90% interval ${fmt(lo, spec.digits)} to ${fmt(hi, spec.digits)}; the one-sided test ${supported ? 'clears' : 'does not clear'} zero).`,
+    result: {
+      ...base,
+      status: supported ? 'supported' : 'not_supported',
+      estimate,
+      lo,
+      hi,
+      detail: `${fmt(estimate, spec.digits)} (90% interval ${fmt(lo, spec.digits)} to ${fmt(hi, spec.digits)}; the one-sided test ${supported ? 'clears' : 'does not clear'} zero).`,
+    },
+    signalIds: chosen.rows.map((r) => r.id),
   };
 }
 
-/** The three registered tests, official on the holdout window. */
-export function evaluatePrereg(facts: SignalFact[], view: ViewOptions): PreregResult[] {
+/** A single test, from the given rows, with no persistence -- used by `interimPrereg` (which must never freeze) and by tests. */
+export function runPrereg(id: PreregResult['id'], rows: PreregRow[], bootstraps: number = PREREG.bootstraps): PreregResult {
+  return computeTest(id, rows, bootstraps).result;
+}
+
+function frozenToResult(id: PreregResult['id'], frozen: FrozenResult): PreregResult {
+  const spec = SPECS.find((s) => s.id === id)!;
+  const day = frozen.frozenAt.toISOString().slice(0, 10);
+  return {
+    id,
+    title: spec.title,
+    status: frozen.status,
+    progress: `${frozen.n} (frozen ${day})`,
+    estimate: frozen.estimate,
+    lo: frozen.lo,
+    hi: frozen.hi,
+    detail: `${fmt(frozen.estimate, spec.digits)} (90% interval ${fmt(frozen.lo, spec.digits)} to ${fmt(frozen.hi, spec.digits)}; frozen ${day} on ${frozen.n} signals; the one-sided test ${frozen.status === 'supported' ? 'cleared' : 'did not clear'} zero).`,
+  };
+}
+
+/**
+ * The three registered tests, official on the holdout window. A test that has already resolved is read
+ * back from `store` and NEVER recomputed, even if more holdout signals have matured since -- otherwise
+ * it would be a running number you could watch drift and stop on when it looked good (optional
+ * stopping), and even a fixed-size test (H2) would still be exposed to a late-arriving, earlier-dated
+ * signal or a restated price changing its answer after the fact. The moment a test first reaches its
+ * registered size, this call freezes it (first-writer-wins, so two concurrent requests can't disagree).
+ * `store` has no default: production call sites build it from their own `db` (`drizzlePreregStore(db)`
+ * in `lib/analytics/cache.ts`); this file must not import `db` directly, or every test here would fail
+ * to load without a live DATABASE_URL. Pass `memoryPreregStore()` in tests.
+ */
+export async function evaluateOfficialPrereg(facts: SignalFact[], view: ViewOptions, store: PreregStore): Promise<PreregResult[]> {
   const rows = preregRows(facts.filter((f) => f.holdoutWindow), view);
-  return (['H1', 'H2', 'H3'] as const).map((id) => runPrereg(id, rows));
+  const out: PreregResult[] = [];
+  for (const id of ['H1', 'H2', 'H3'] as const) {
+    const frozen = await store.get(id);
+    if (frozen) {
+      out.push(frozenToResult(id, frozen));
+      continue;
+    }
+    const computed = computeTest(id, rows);
+    if (!computed.signalIds) {
+      out.push(computed.result);
+      continue;
+    }
+    const spec = SPECS.find((s) => s.id === id)!;
+    const frozenRow = await store.freeze({
+      testId: id,
+      n: computed.signalIds.length,
+      signalIds: computed.signalIds,
+      estimate: computed.result.estimate!,
+      lo: computed.result.lo!,
+      hi: computed.result.hi!,
+      status: computed.result.status as 'supported' | 'not_supported',
+      bootstraps: PREREG.bootstraps,
+      seed: spec.seed,
+    });
+    out.push(frozenToResult(id, frozenRow));
+  }
+  return out;
 }
 
 /** The same tests on the design set: descriptive only, never evidence (the rules were chosen after seeing it). */

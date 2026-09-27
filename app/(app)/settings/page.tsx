@@ -10,7 +10,8 @@ import { telegramConfigured } from '@/lib/notify/telegram';
 import { BASELINE_VERSION, BASELINE_WEIGHTS_KEY, baselineWeightsSchema } from '@/lib/scoring/baseline';
 import { HOLDOUT_KEY, holdoutSchema } from '@/lib/research/holdout';
 import { getCachedSignalFactsForTests } from '@/lib/analytics/cache';
-import { evaluatePrereg } from '@/lib/analytics/prereg';
+import { evaluateOfficialPrereg } from '@/lib/analytics/prereg';
+import { drizzlePreregStore } from '@/lib/analytics/prereg-store';
 import type { ViewOptions } from '@/lib/analytics/facts';
 import { getSetting, listVersions } from '@/lib/settings';
 import { formatDateTime } from '@/lib/format';
@@ -99,7 +100,7 @@ export default async function SettingsPage() {
   const holdout = await getSetting(db, HOLDOUT_KEY, holdoutSchema);
   const telegram = telegramConfigured();
   const preregView: ViewOptions = { bench: 'SPY', net: true, scope: 'post', costs };
-  const prereg = evaluatePrereg(await getCachedSignalFactsForTests(), preregView);
+  const prereg = await evaluateOfficialPrereg(await getCachedSignalFactsForTests(), preregView, drizzlePreregStore(db));
 
   return (
     <>

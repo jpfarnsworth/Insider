@@ -57,6 +57,13 @@
       "when": 1790526500253,
       "tag": "0007_odd_swarm",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790529413065,
+      "tag": "0008_majestic_war_machine",
+      "breakpoints": true
     }
   ]
 }

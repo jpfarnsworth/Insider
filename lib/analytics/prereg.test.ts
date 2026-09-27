@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_COSTS } from '@/lib/market/costs';
 import type { SignalFact, ViewOptions } from './facts';
 import { fact } from './fixtures';
-import { MIN_ABANDON_REASON_LENGTH, PREREG, blockBootstrap, canReveal, evaluatePrereg, interimPrereg, offeringGap, quantile, rankCorrelationDifference, runPrereg, topTierMean, type PreregRow } from './prereg';
+import { MIN_ABANDON_REASON_LENGTH, PREREG, blockBootstrap, canReveal, evaluateOfficialPrereg, interimPrereg, offeringGap, quantile, rankCorrelationDifference, runPrereg, topTierMean, type PreregRow } from './prereg';
+import { memoryPreregStore } from './prereg-store';
 
 // The registered bootstrap is 2000 resamples of a few hundred signals per test: slow on a busy Pi.
 vi.setConfig({ testTimeout: 30_000 });
@@ -48,7 +49,8 @@ describe('helpers', () => {
 });
 
 describe('statistics', () => {
-  const row = (agent: number | null, baseline: number, excess: number, tagged = false, week = 0): PreregRow => ({ week, at: 0, agent, baseline, excess, tagged });
+  let rowSeq = 0;
+  const row = (agent: number | null, baseline: number, excess: number, tagged = false, week = 0): PreregRow => ({ id: `r${rowSeq++}`, week, at: 0, agent, baseline, excess, tagged });
 
   it('top tier is the baseline\'s top third only, ignoring the agent score', () => {
     // Baseline top-2 by score are rows 4 and 5 (9 and 8); the agent's own top rows (0, 1) are not counted.
@@ -75,35 +77,48 @@ describe('statistics', () => {
 });
 
 describe('registered tests', () => {
-  it('stay awaiting until the fixed sample size, on holdout-window signals only', () => {
+  it('stay awaiting until the fixed sample size, on holdout-window signals only', async () => {
     const facts = [...holdout(50, 10, { meanExcess: 3 }), ...holdout(400, 40).map((f) => ({ ...f, holdoutWindow: false }))];
-    const [h1, h2, h3] = evaluatePrereg(facts, view);
+    const [h1, h2, h3] = await evaluateOfficialPrereg(facts, view, memoryPreregStore());
     expect([h1.status, h2.status, h3.status]).toEqual(['awaiting', 'awaiting', 'awaiting']);
     expect(h1.progress).toBe(`50 of ${PREREG.h1Signals}`);
   });
 
-  it('H1 is supported when the top tier is clearly positive, and not when it is flat', () => {
-    expect(evaluatePrereg(holdout(200, 25, { agentEdge: 1, baselineEdge: 1, meanExcess: 4 }), view)[0].status).toBe('supported');
-    expect(evaluatePrereg(holdout(200, 25, { meanExcess: 0 }), view)[0].status).toBe('not_supported');
+  it('H1 is supported when the top tier is clearly positive, and not when it is flat', async () => {
+    expect((await evaluateOfficialPrereg(holdout(200, 25, { agentEdge: 1, baselineEdge: 1, meanExcess: 4 }), view, memoryPreregStore()))[0].status).toBe('supported');
+    expect((await evaluateOfficialPrereg(holdout(200, 25, { meanExcess: 0 }), view, memoryPreregStore()))[0].status).toBe('not_supported');
   });
 
-  it('H2 uses the earliest 300 signals and needs the agent to out-rank the baseline', () => {
-    const good = evaluatePrereg(holdout(400, 40, { agentEdge: 4, baselineEdge: 0 }), view)[1];
+  it('H1 freezes at the first 90 signals by date: a signal that matures later never joins it', async () => {
+    const store = memoryPreregStore();
+    const first90 = holdout(90, 12, { meanExcess: 4 });
+    const before = await evaluateOfficialPrereg(first90, view, store);
+    expect(before[0].status).not.toBe('awaiting');
+    const laterArrivals = holdout(50, 12, { meanExcess: -20 }).map((f, i) => ({ ...f, id: `later-${i}`, signalAt: f.signalAt + 10_000_000 }));
+    const after = await evaluateOfficialPrereg([...first90, ...laterArrivals], view, store);
+    expect(after[0]).toEqual(before[0]); // unchanged: still the same frozen 90, ignoring the 50 new (much worse) signals
+  });
+
+  it('H2 uses the earliest 300 signals and needs the agent to out-rank the baseline', async () => {
+    const good = (await evaluateOfficialPrereg(holdout(400, 40, { agentEdge: 4, baselineEdge: 0 }), view, memoryPreregStore()))[1];
     expect(good.status).toBe('supported');
-    expect(good.progress).toBe('400 of 300');
-    expect(evaluatePrereg(holdout(400, 40, { agentEdge: 0, baselineEdge: 0 }), view)[1].status).toBe('not_supported');
-    expect(evaluatePrereg(holdout(400, 40, { agentEdge: 0, baselineEdge: 4 }), view)[1].status).toBe('not_supported');
+    expect(good.progress).toBe('300 (frozen ' + new Date().toISOString().slice(0, 10) + ')');
+    expect((await evaluateOfficialPrereg(holdout(400, 40, { agentEdge: 0, baselineEdge: 0 }), view, memoryPreregStore()))[1].status).toBe('not_supported');
+    expect((await evaluateOfficialPrereg(holdout(400, 40, { agentEdge: 0, baselineEdge: 4 }), view, memoryPreregStore()))[1].status).toBe('not_supported');
   });
 
-  it('H3 is supported when tagged signals are clearly worse, and not otherwise', () => {
-    expect(evaluatePrereg(holdout(260, 30, { taggedEvery: 5, taggedPenalty: 15 }), view)[2].status).toBe('supported');
-    expect(evaluatePrereg(holdout(260, 30, { taggedEvery: 5, taggedPenalty: 0 }), view)[2].status).toBe('not_supported');
-    expect(evaluatePrereg(holdout(100, 30, { taggedEvery: 10, taggedPenalty: 15 }), view)[2].status).toBe('awaiting'); // 10 tagged of 30
+  it('H3 is supported when tagged signals are clearly worse, and not otherwise', async () => {
+    expect((await evaluateOfficialPrereg(holdout(260, 30, { taggedEvery: 5, taggedPenalty: 15 }), view, memoryPreregStore()))[2].status).toBe('supported');
+    expect((await evaluateOfficialPrereg(holdout(260, 30, { taggedEvery: 5, taggedPenalty: 0 }), view, memoryPreregStore()))[2].status).toBe('not_supported');
+    expect((await evaluateOfficialPrereg(holdout(100, 30, { taggedEvery: 10, taggedPenalty: 15 }), view, memoryPreregStore()))[2].status).toBe('awaiting'); // 10 tagged of 30
   });
 
-  it('is reproducible', () => {
+  it('a resolved test is read back from the store, never recomputed', async () => {
+    const store = memoryPreregStore();
     const facts = holdout(200, 25, { agentEdge: 1, meanExcess: 2 });
-    expect(evaluatePrereg(facts, view)).toEqual(evaluatePrereg(facts, view));
+    const first = await evaluateOfficialPrereg(facts, view, store);
+    const second = await evaluateOfficialPrereg(facts, view, store);
+    expect(second).toEqual(first);
   });
 
   it('runPrereg keeps working with few weeks, and the interim never counts as a result', () => {

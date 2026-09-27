@@ -14,6 +14,14 @@ fixed first. So the three tests below, their sizes and their rules are fixed now
 - **Measure:** 30-trading-day excess return vs SPY, net of the round-trip cost (0.3%, or 1.0% below $1M average daily dollar volume), entry at the next regular-session open after filing acceptance. Complete outcomes only.
 - **Scorers:** baseline formula version 2 with the weights in `settings` at registration. Agent: Gemini 2.5 Flash. Every holdout signal is scored with **one** prompt version (see "Agent prompt"), never a mix. Design-set scores (prompt v1) are kept for reference.
 - **Method for all tests:** whole calendar weeks are resampled with replacement (signals in a week move together), 2000 resamples, fixed seeds, one-sided 5% level. Each test is run **once**, at its fixed size, with no peeking at interim results as evidence. No multiple-testing correction: the three are separate hypotheses with separate decisions.
+- **Frozen the moment it first resolves, never recomputed.** The instant a test's population first reaches its registered
+  size, its exact signal list, estimate, interval and verdict are written to `prereg_results` and read back verbatim from
+  then on -- the app never recalculates it, however much more holdout data arrives later. This is not optional: without
+  it, a test that kept including newly-matured signals would be a running number you could watch drift and stop on
+  when it looked good (the classic optional-stopping problem, which would undo the whole point of pre-registering). It
+  also guards against late corrections -- a Form 4 filed months late with an earlier transaction date (this has
+  happened: TRIN, 221 days late), or a price later restated by a split -- changing which signals belong to an
+  already-decided test.
 - **The holdout stays hidden** (Settings) until the design is frozen. Revealing it is a recorded, versioned setting change.
 
 ## H1 (gate 2): the baseline's top tier makes money

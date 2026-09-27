@@ -222,11 +222,19 @@ There is no Row Level Security, so access control is entirely in code:
 - **Pre-registered holdout tests** (`docs/preregistration.md`, `lib/analytics/prereg.ts`; registered 2026-09-27 before any holdout return
   existed; the `PREREG` constants ARE the registration, so changing one is a new dated registration, never a tweak). All use holdout-window
   signals only (signal day on/after the holdout start), the 30-day net excess vs SPY, a weekly-block bootstrap (whole calendar weeks
-  resampled), one-sided 5%, each run once at its fixed size. **H1 = gate 2**: the baseline's top third (rank-based) has mean > 0, at 90+ holdout signals with a
-  matured outcome. Deliberately baseline-only, independent of the agent (fixed 2026-09-27, before any holdout signal existed,
-  as a recorded deviation: it originally required signals scored by both, so it could stall if agent scoring did). **H2 = gate 3**: agent Spearman minus baseline Spearman > 0, one-sided, the earliest
-  300 shared signals. **H3**: offering-like (`single_day_single_price`) clusters underperform, at 30+ tagged signals. Expect
-  inconclusive results: H2 is registered as underpowered at n=300 (design-set interval about +/-0.13).
+  resampled), one-sided 5%, each run **once**, at its fixed size, then **frozen forever** in `prereg_results`
+  (`lib/analytics/prereg-store.ts`, first-writer-wins) -- never recomputed, even as more holdout signals mature. This is what makes
+  "run once" real rather than aspirational: without persistence, re-evaluating a growing population on every page view is optional
+  stopping by another name, and even a fixed-size test is exposed to a late-filed Form 4 (has happened: TRIN, 221 days late) or a
+  restated price changing the answer after the fact. `evaluateOfficialPrereg` takes a `PreregStore`; production passes
+  `drizzlePreregStore(db)`, tests pass `memoryPreregStore()` (this module and `gates.ts` must never import `db` at the top level, or
+  every test in them would need a live `DATABASE_URL` just to load). **H1 = gate 2**: the baseline's top third (rank-based) has mean > 0,
+  at the EARLIEST 90 holdout signals with a matured outcome (sorted by signal date, frozen at first reach). Deliberately baseline-only,
+  independent of the agent (fixed 2026-09-27, before any holdout signal existed, as a recorded deviation: it originally required
+  signals scored by both, so it could stall if agent scoring did). **H2 = gate 3**: agent Spearman minus baseline Spearman > 0,
+  one-sided, the earliest 300 shared signals. **H3**: offering-like (`single_day_single_price`) clusters underperform, at the earliest
+  point 30+ tagged signals have appeared (30+ tagged, frozen at that prefix). Expect inconclusive results: H2 is registered as
+  underpowered at n=300 (design-set interval about +/-0.13).
 - **Gate 3 default is "not promoted"**: the agent keeps running as a shadow scorer no decision uses (about $0.16 a month), Phase 2
   proceeds on the baseline, and gate 3 resolves (status pass, so it never blocks) with "Not promoted (default)" until H2 says
   "Promote". The top-third tier comparison (`head-to-head.ts`) is descriptive only: it needs a ~5-point gap at n=300.

@@ -10,7 +10,8 @@ import { COSTS_KEY, costsSchema } from '@/lib/market/costs';
 import { OFFERING_LIKE } from '@/lib/clusters/tags';
 import { getSetting } from '@/lib/settings';
 import { getCachedPipelineHealth, getCachedPortfolio, getCachedSignalFacts, getCachedSignalFactsForTests } from '@/lib/analytics/cache';
-import { PREREG, evaluatePrereg, interimPrereg } from '@/lib/analytics/prereg';
+import { PREREG, evaluateOfficialPrereg, interimPrereg } from '@/lib/analytics/prereg';
+import { drizzlePreregStore } from '@/lib/analytics/prereg-store';
 import { HOLDOUT_KEY, holdoutSchema, loadHoldoutStart } from '@/lib/research/holdout';
 import { search } from '@/lib/search';
 import { listEntries, readEntry } from '@/lib/worklog';
@@ -144,7 +145,7 @@ export function createMcpServer(): McpServer {
       const facts = all.filter((f) => inScope(f, view) && !(a.exclude_offering_like && f.tags.includes(OFFERING_LIKE)));
       const gateView: ViewOptions = { bench, net: true, scope: 'post', costs };
       const [testFactsAll, holdoutSettings] = await Promise.all([getCachedSignalFactsForTests(), getSetting(db, HOLDOUT_KEY, holdoutSchema)]);
-      const gates = evaluateGates(all.filter((f) => inScope(f, gateView)), gateView, health, { holdoutFrom: await loadHoldoutStart(db), testFacts: testFactsAll.filter((f) => inScope(f, gateView)) });
+      const gates = await evaluateGates(all.filter((f) => inScope(f, gateView)), gateView, health, { holdoutFrom: await loadHoldoutStart(db), testFacts: testFactsAll.filter((f) => inScope(f, gateView)) });
       const portfolio = await getCachedPortfolio(facts.filter((f) => !f.holdout).map((f) => f.id), bench, a.hold_days ?? GATE_HORIZON, view.net, costs);
       const kpis = computeKpis(facts, view, Date.now(), active.length);
       const summary = (h: number) => {
@@ -179,7 +180,7 @@ export function createMcpServer(): McpServer {
         preregisteredTests: {
           registered: PREREG.registered,
           note: 'Each resolves automatically once it reaches its registered size, on holdout-window signals, with no reveal needed. Design-set figures are descriptive, not evidence.',
-          holdout: evaluatePrereg(testFactsAll.filter((f) => inScope(f, gateView)), gateView),
+          holdout: await evaluateOfficialPrereg(testFactsAll.filter((f) => inScope(f, gateView)), gateView, drizzlePreregStore(db)),
           designSetDescriptive: interimPrereg(all.filter((f) => inScope(f, gateView)), gateView),
           revealed: holdoutSettings.revealedAt
             ? {

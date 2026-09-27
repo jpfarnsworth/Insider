@@ -109,3 +109,21 @@ export const mcpRequestLogs = pgTable(
   },
   (t) => [index('mcp_request_logs_created_at_idx').on(t.createdAt)],
 );
+
+// A pre-registered test's result, frozen exactly once (docs/preregistration.md). `createdAt` IS the
+// freeze timestamp. Never updated afterward: a test that resolves stays resolved on the same signals,
+// whatever data arrives later (a late-filed Form 4, a restated price). Prevents optional stopping
+// (recomputing on a growing sample until it looks the way you want) and late-correction drift alike.
+export const preregResults = pgTable('prereg_results', {
+  id: id(),
+  testId: text('test_id').notNull().unique(),
+  n: integer('n').notNull(),
+  signalIds: jsonb('signal_ids').$type<string[]>().notNull(),
+  estimate: numeric('estimate', { precision: 14, scale: 6 }).notNull(),
+  lo: numeric('lo', { precision: 14, scale: 6 }).notNull(),
+  hi: numeric('hi', { precision: 14, scale: 6 }).notNull(),
+  status: text('status', { enum: ['supported', 'not_supported'] }).notNull(),
+  bootstraps: integer('bootstraps').notNull(),
+  seed: integer('seed').notNull(),
+  ...timestamps,
+});

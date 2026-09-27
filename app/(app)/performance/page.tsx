@@ -16,7 +16,8 @@ import {
   type ViewOptions,
 } from '@/lib/analytics/facts';
 import { allGatesPass, evaluateGates, GATE_HORIZON } from '@/lib/analytics/gates';
-import { PREREG, evaluatePrereg, interimPrereg } from '@/lib/analytics/prereg';
+import { PREREG, evaluateOfficialPrereg, interimPrereg } from '@/lib/analytics/prereg';
+import { drizzlePreregStore } from '@/lib/analytics/prereg-store';
 import { histogram, MIN_N, rollingHitRate, SCORE_BANDS, summarize } from '@/lib/analytics/stats';
 import { requireUser } from '@/lib/auth/require-user';
 import { COSTS_KEY, costsSchema } from '@/lib/market/costs';
@@ -76,9 +77,9 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
   // The gates always use the spec's basis (post-cutoff, net of costs) whatever the toggles say.
   const gateView: ViewOptions = { bench, net: true, scope: 'post', costs };
   const testFacts = await getCachedSignalFactsForTests();
-  const gates = evaluateGates(all.filter((f) => inScope(f, gateView)), gateView, health, { holdoutFrom: await loadHoldoutStart(db), testFacts: testFacts.filter((f) => inScope(f, gateView)) });
+  const gates = await evaluateGates(all.filter((f) => inScope(f, gateView)), gateView, health, { holdoutFrom: await loadHoldoutStart(db), testFacts: testFacts.filter((f) => inScope(f, gateView)) });
   const gateFacts = all.filter((f) => inScope(f, gateView));
-  const prereg = evaluatePrereg(gateFacts, gateView);
+  const prereg = await evaluateOfficialPrereg(gateFacts, gateView, drizzlePreregStore(db));
   const preregInterim = interimPrereg(gateFacts, gateView);
 
   const href = (over: Record<string, string>) => {

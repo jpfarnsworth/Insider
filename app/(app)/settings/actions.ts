@@ -17,7 +17,8 @@ import { NOTIFICATIONS_KEY, notificationsSchema } from '@/lib/notify/settings';
 import { BASELINE_WEIGHTS_KEY, baselineWeightsSchema } from '@/lib/scoring/baseline';
 import { HOLDOUT_KEY, canChangeFrom, holdoutSchema } from '@/lib/research/holdout';
 import { getCachedSignalFactsForTests } from '@/lib/analytics/cache';
-import { canReveal, evaluatePrereg } from '@/lib/analytics/prereg';
+import { canReveal, evaluateOfficialPrereg } from '@/lib/analytics/prereg';
+import { drizzlePreregStore } from '@/lib/analytics/prereg-store';
 import type { ViewOptions } from '@/lib/analytics/facts';
 import { getSetting, saveSetting } from '@/lib/settings';
 import { ANALYTICS_TAG } from '@/lib/analytics/cache';
@@ -158,7 +159,7 @@ export async function holdoutAction(_prev: FormState, fd: FormData): Promise<For
     // Flipping false -> true right now: check the registered tests before allowing it.
     const [costs, testFacts] = await Promise.all([getSetting(db, COSTS_KEY, costsSchema), getCachedSignalFactsForTests()]);
     const view: ViewOptions = { bench: 'SPY', net: true, scope: 'post', costs };
-    const results = evaluatePrereg(testFacts, view);
+    const results = await evaluateOfficialPrereg(testFacts, view, drizzlePreregStore(db));
     const check = canReveal(results, abandonReason);
     if (!check.ok) return { status: 'error', message: check.error };
     revealedAt = new Date().toISOString();

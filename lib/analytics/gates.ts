@@ -1,7 +1,8 @@
 import type { SignalFact, ViewOptions } from './facts';
 import { excessValues } from './facts';
 import { headToHead } from './head-to-head';
-import { PREREG, evaluatePrereg, interimPrereg, type PreregResult } from './prereg';
+import { PREREG, evaluateOfficialPrereg, interimPrereg, type PreregResult } from './prereg';
+import { memoryPreregStore, type PreregStore } from './prereg-store';
 
 // Spec §11: paper trading is built only when ALL of these pass, on post-model-cutoff signals,
 // net of costs. "Insufficient" means the data has not accumulated yet, which is not a failure.
@@ -107,7 +108,12 @@ function gate3From(facts: SignalFact[], view: ViewOptions, h2: PreregResult, int
  * uses the ordinary masked `facts`, unaffected. Defaults to `facts` when omitted, so callers that don't
  * distinguish masked/unmasked (all current tests) see the same behaviour as before this split.
  */
-export function evaluateGates(facts: SignalFact[], view: ViewOptions, health: PipelineHealth, opts: { holdoutFrom?: string | null; testFacts?: SignalFact[] } = {}): Gate[] {
+export async function evaluateGates(
+  facts: SignalFact[],
+  view: ViewOptions,
+  health: PipelineHealth,
+  opts: { holdoutFrom?: string | null; testFacts?: SignalFact[]; preregStore?: PreregStore } = {},
+): Promise<Gate[]> {
   const complete = excessValues(facts, GATE_HORIZON, view).length;
   const gate1: Gate = {
     id: 1,
@@ -116,7 +122,10 @@ export function evaluateGates(facts: SignalFact[], view: ViewOptions, health: Pi
     detail: `${complete} of ${GATE_MIN_SIGNALS}`,
   };
 
-  const official = evaluatePrereg(opts.testFacts ?? facts, view);
+  // No store given: fall back to a throwaway in-memory one (safe, no I/O) rather than importing `db`
+  // here, which would make every test in this module require a live DATABASE_URL to even load.
+  // Production call sites always pass the real, persistent store explicitly.
+  const official = await evaluateOfficialPrereg(opts.testFacts ?? facts, view, opts.preregStore ?? memoryPreregStore());
   const interim = interimPrereg(facts, view);
   const gate2 = gate2From(official[0], interim[0], opts.holdoutFrom ?? null);
   const gate3 = gate3From(facts, view, official[1], interim[1]);
