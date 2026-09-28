@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Insider Signals: a single-user research platform that ingests SEC Form 4 filings, detects clusters of insider
 open-market purchases, scores them (deterministic baseline + an LLM agent, Gemini 2.5 Flash), and tracks forward returns vs. SPY.
-**Phase 1 has no trading of any kind.** The full spec is GitHub issue #1 on `jpfarnsworth/Trader`; read it before
+**Phase 1 has no trading of any kind.** The full spec is GitHub issue #1 on `jpfarnsworth/Insider`; read it before
 changing behavior. Build order is spec §14 (milestones 1–9).
 
 ## Commands
