@@ -17,7 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
-      <aside className="bg-sidebar text-sidebar-foreground border-b md:w-58 md:shrink-0 md:border-r md:border-b-0">
+      <aside className="bg-sidebar text-sidebar-foreground border-b md:sticky md:top-0 md:h-screen md:w-58 md:shrink-0 md:self-start md:overflow-y-auto md:border-r md:border-b-0">
         <div className="px-5 pt-5 pb-3 text-base font-semibold tracking-tight">
           Insider <span className="text-primary">Signals</span>
         </div>
